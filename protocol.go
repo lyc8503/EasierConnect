@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -80,72 +79,73 @@ func send() {
 
 }
 
-func main() {
+// func main() {
 
-	server := "vpn.nju.edu.cn:443"
-	token := []byte("\x66\x65\x32\x30" +
-		"\x62\x33\x30\x63\x30\x62\x39\x31\x62\x65\x65\x37\x37\x38\x30\x61" +
-		"\x66\x64\x39\x37\x30\x30\x38\x31\x31\x63\x37\x00\x64\x31\x39\x34" +
-		"\x30\x33\x65\x31\x64\x34\x62\x66\x32\x32\x32\x30")
+// 	server := "vpn.nju.edu.cn:443"
 
-	ip := []byte("\x66\x28\x1d\xac")
+// 	random := make([]byte, 16)
+// 	rand.Read(random)
 
-	conn, err := tlsConn(server)
-	if err != nil {
-		panic(err)
-	}
-	defer conn.Close()
+// 	token := []byte("d5090d9753544a3e541e4a02b742a27" + "\x00" + "b014487c1c9c622e")
+// 	ip := []byte{242, 40, 29, 172}
 
-	go recvListen(conn, (*[48]byte)(token), (*[4]byte)(ip))
+// 	conn, err := tlsConn(server)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	defer conn.Close()
 
-	// tlsConn for sending data
-	conn, err = tlsConn(server)
-	if err != nil {
-		panic(err)
-	}
-	defer conn.Close()
+// 	go recvListen(conn, (*[48]byte)(token), (*[4]byte)(ip))
 
-	// SEND STREAM START
-	message := []byte{0x08, 0x00, 0x00, 0x00}
-	message = append(message, token[:]...)
-	message = append(message, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}...)
-	message = append(message, ip[:]...)
+// 	// tlsConn for sending data
+// 	conn, err = tlsConn(server)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	defer conn.Close()
 
-	n, err := conn.Write(message)
-	if err != nil {
-		panic(err)
-	}
-	log.Printf("send handshake: wrote %d bytes", n)
-	dumpHex(message[:n])
+// 	// SEND STREAM START
+// 	message := []byte{0x08, 0x00, 0x00, 0x00}
+// 	message = append(message, token[:]...)
+// 	message = append(message, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}...)
+// 	message = append(message, ip[:]...)
 
-	reply := make([]byte, 1500)
-	n, err = conn.Read(reply)
-	if err != nil {
-		panic(err)
-	}
-	log.Printf("send handshake: read %d bytes", n)
-	dumpHex(reply[:n])
+// 	n, err := conn.Write(message)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	log.Printf("send handshake: wrote %d bytes", n)
+// 	dumpHex(message[:n])
 
-	if reply[0] != 0x02 {
-		panic("unexpected send handshake reply.")
-	}
+// 	reply := make([]byte, 1500)
+// 	n, err = conn.Read(reply)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	log.Printf("send handshake: read %d bytes", n)
+// 	dumpHex(reply[:n])
 
-	message2 := "\x45\x00\x00\x3c\x01\x6f\x00\x00\x80\x01\x8e\x40\xac\x1d\x28\x66" +
-		"\x72\xd4\x63\xba\x08\x00\x49\x2c\x00\x01\x04\x2f\x61\x62\x63\x64" +
-		"\x65\x66\x67\x68\x69\x6a\x6b\x6c\x6d\x6e\x6f\x70\x71\x72\x73\x74" +
-		"\x75\x76\x77\x61\x62\x63\x64\x65\x66\x67\x68\x69"
-	n, err = io.WriteString(conn, message2)
-	log.Printf("send: wrote %d bytes", n)
-	dumpHex([]byte(message2[:n]))
+// 	if reply[0] != 0x02 {
+// 		panic("unexpected send handshake reply.")
+// 	}
 
-	for true {
-		time.Sleep(time.Second)
-	}
+// 	for true {
 
-	// // HANDSHAKE?
-	// // message = message + "\x05\x00\x00\x00" + token + "\x00\x00\x00\x00\x00\x00\x00\x00" + ip
+// 		message2 := "\x45\x00\x00\x3c\x01\x6f\x00\x00\x80\x01\x8e\x40\xac\x1d\x28\x66" +
+// 			"\x72\xd4\x63\xba\x08\x00\x49\x2c\x00\x01\x04\x2f\x61\x62\x63\x64" +
+// 			"\x65\x66\x67\x68\x69\x6a\x6b\x6c\x6d\x6e\x6f\x70\x71\x72\x73\x74" +
+// 			"\x75\x76\x77\x61\x62\x63\x64\x65\x66\x67\x68\x69"
+// 		n, err = io.WriteString(conn, message2)
+// 		log.Printf("send: wrote %d bytes", n)
+// 		dumpHex([]byte(message2[:n]))
 
-	// // HEARTBEAT?
-	// // message = message + "\x03\x00\x00\x00" + token + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+// 		time.Sleep(time.Second)
+// 	}
 
-}
+// 	// // HANDSHAKE?
+// 	// // message = message + "\x05\x00\x00\x00" + token + "\x00\x00\x00\x00\x00\x00\x00\x00" + ip
+
+// 	// // HEARTBEAT?
+// 	// // message = message + "\x03\x00\x00\x00" + token + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+
+// }
