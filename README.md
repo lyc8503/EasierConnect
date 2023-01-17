@@ -6,7 +6,7 @@ Complete:
 - [x] Web login reverse engineering
 
 To-do: 
-- [ ] Get Session ID & IP
+- [x] Get Session ID & IP
 - [ ] Socks to L3
 - [ ] Better code formatting & better logging
 - [ ] Pack & Release

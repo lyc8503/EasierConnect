@@ -6,19 +6,33 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
+
+	utls "github.com/refraction-networking/utls"
 )
 
-func WebLogin() string {
-	server := "https://" + "vpn.nju.edu.cn:443"
-	username := "211250076"
-	password := "233.6666"
+func WebLogin() []byte {
+
+	hostname := ""
+	username := ""
+	password := ""
+
+	fmt.Print("Server hostname(e.g. vpn.nju.edu.cn):")
+	fmt.Scan(&hostname)
+	fmt.Print("Username:")
+	fmt.Scan(&username)
+	fmt.Print("Password:")
+	fmt.Scan(&password)
+
+	server := "https://" + hostname + ":443"
 
 	c := &http.Client{
 		Transport: &http.Transport{
@@ -145,19 +159,23 @@ func WebLogin() string {
 
 	log.Printf("Web Login process done.")
 
-	addr = server + "/por/conf.csp"
-	log.Printf("ECAgent Request: " + addr)
-	req, err = http.NewRequest("GET", addr, nil)
-	req.Header.Set("Cookie", "TWFID="+twfId)
+	dialConn, err := net.Dial("tcp", hostname+":443")
+	defer dialConn.Close()
+	conn := utls.UClient(dialConn, &utls.Config{InsecureSkipVerify: true}, utls.HelloGolang)
+	defer conn.Close()
 
-	resp, err = c.Do(req)
-	if err != nil {
-		panic(err)
+	// WTF???
+	// When you establish a HTTPS connection to server and send a valid request with TWFID to it
+	// The **TLS ServerHello SessionId** is the first part of token
+	log.Printf("ECAgent Request: /por/conf.csp & /por/rclist.csp")
+	io.WriteString(conn, "GET /por/conf.csp HTTP/1.1\r\nHost: "+hostname+"\r\nCookie: TWFID="+twfId+"\r\n\r\nGET /por/rclist.csp HTTP/1.1\r\nHost: "+hostname+"\r\nCookie: TWFID="+twfId+"\r\n\r\n")
+
+	log.Printf("Server Session ID: %q", conn.HandshakeState.ServerHello.SessionId)
+
+	n, err = conn.Read(buf)
+	if n == 0 || err != nil {
+		panic("ECAgent Request invalid: error " + err.Error() + "\n" + string(buf[:n]))
 	}
 
-	n, _ = resp.Body.Read(buf)
-	defer resp.Body.Close()
-
-	// log.Printf(string(buf[:n]))
-
+	return []byte(hex.EncodeToString(conn.HandshakeState.ServerHello.SessionId)[:31] + "\x00" + twfId)
 }
