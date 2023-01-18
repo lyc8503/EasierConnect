@@ -3,9 +3,12 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"log"
 	"net"
 	"os"
+	"os/exec"
 
 	tls "github.com/refraction-networking/utls"
 	"github.com/songgao/water"
@@ -43,7 +46,7 @@ func tlsConn(server string) (*tls.UConn, error) {
 	return conn, nil
 }
 
-func recvListen(conn *tls.UConn, token *[48]byte, ip *[4]byte, targetDev *water.Interface) {
+func recvListen(conn *tls.UConn, token *[48]byte, ip *[4]byte, targetDev *water.Interface) error {
 	// RECV STREAM START
 	message := []byte{0x06, 0x00, 0x00, 0x00}
 	message = append(message, token[:]...)
@@ -64,15 +67,14 @@ func recvListen(conn *tls.UConn, token *[48]byte, ip *[4]byte, targetDev *water.
 	dumpHex(reply[:n])
 
 	if reply[0] != 0x01 {
-		panic("unexpected recv handshake reply.")
+		return errors.New("unexpected recv handshake reply.")
 	}
 
 	for true {
 		n, err = conn.Read(reply)
 
 		if err != nil {
-			log.Fatal(err)
-			continue
+			panic(err)
 		}
 
 		log.Printf("recv: read %d bytes", n)
@@ -81,7 +83,7 @@ func recvListen(conn *tls.UConn, token *[48]byte, ip *[4]byte, targetDev *water.
 		n, err = targetDev.Write(reply[:n])
 
 		if err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 
 		// if strings.Contains(string(reply[:n]), "abcdefghijklmnopqrstuvwabcdefghi") {
@@ -90,9 +92,11 @@ func recvListen(conn *tls.UConn, token *[48]byte, ip *[4]byte, targetDev *water.
 
 		// time.Sleep(time.Second)
 	}
+
+	return nil
 }
 
-func QueryIp(conn *tls.UConn, token *[48]byte) []byte {
+func QueryIp(conn *tls.UConn, token *[48]byte) ([]byte, error) {
 	// QUERY IP PACKET
 	message := []byte{0x00, 0x00, 0x00, 0x00}
 	message = append(message, token[:]...)
@@ -100,7 +104,7 @@ func QueryIp(conn *tls.UConn, token *[48]byte) []byte {
 
 	n, err := conn.Write(message)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	log.Printf("query ip: wrote %d bytes", n)
@@ -115,13 +119,43 @@ func QueryIp(conn *tls.UConn, token *[48]byte) []byte {
 		panic("unexpected query ip reply.")
 	}
 
-	return reply[4:8]
+	return reply[4:8], nil
 }
 
-func main() {
-	server := "vpn.nju.edu.cn:443"
+func SendConnHandshake(conn *tls.UConn, token *[48]byte, ip *[4]byte) error {
+	// SEND STREAM START
+	message := []byte{0x05, 0x00, 0x00, 0x00}
+	message = append(message, token[:]...)
+	message = append(message, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}...)
+	message = append(message, ip[:]...)
 
-	token := WebLogin()
+	n, err := conn.Write(message)
+	if err != nil {
+		return err
+	}
+	log.Printf("send handshake: wrote %d bytes", n)
+	dumpHex(message[:n])
+
+	reply := make([]byte, 1500)
+	n, err = conn.Read(reply)
+	if err != nil {
+		return err
+	}
+	log.Printf("send handshake: read %d bytes", n)
+	dumpHex(reply[:n])
+
+	if reply[0] != 0x02 {
+		return errors.New("unexpected send handshake reply.")
+	}
+
+	return nil
+}
+
+func Connect(server string, twfId string) error {
+	agentToken := ECAgentToken(server, twfId)
+	token := []byte(agentToken + twfId)
+	server = server + ":443"
+
 	// query IP
 	conn, err := tlsConn(server)
 	if err != nil {
@@ -129,7 +163,11 @@ func main() {
 	}
 	defer conn.Close()
 
-	ip := QueryIp(conn, (*[48]byte)(token))
+	ip, err := QueryIp(conn, (*[48]byte)(token))
+	if err != nil {
+		panic(err)
+	}
+
 	log.Printf("IP: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
 	ip[0], ip[1], ip[2], ip[3] = ip[3], ip[2], ip[1], ip[0] // reverse the ip slice for future use
 
@@ -139,11 +177,21 @@ func main() {
 	ifce, err := water.New(water.Config{
 		DeviceType: water.TUN,
 	})
+
 	if err != nil {
 		panic(err)
 	}
 
-	// send conn
+	defer ifce.Close()
+
+	// try to set tun0 up (on linux)
+	ipStr := fmt.Sprintf("%d.%d.%d.%d", ip[3], ip[2], ip[1], ip[0])
+	err = exec.Command("ifconfig", ifce.Name(), ipStr, "up").Run()
+	if err != nil {
+		log.Print("Failed to set TUN dev up, Try bring it up manually.")
+	}
+
+	// recv conn
 	conn, err = tlsConn(server)
 	if err != nil {
 		panic(err)
@@ -159,40 +207,17 @@ func main() {
 	}
 	defer conn.Close()
 
-	// SEND STREAM START
-	message := []byte{0x05, 0x00, 0x00, 0x00}
-	message = append(message, token[:]...)
-	message = append(message, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}...)
-	message = append(message, ip[:]...)
+	SendConnHandshake(conn, (*[48]byte)(token), (*[4]byte)(ip))
 
-	n, err := conn.Write(message)
-	if err != nil {
-		panic(err)
-	}
-	log.Printf("send handshake: wrote %d bytes", n)
-	dumpHex(message[:n])
-
-	reply := make([]byte, 1500)
-	n, err = conn.Read(reply)
-	if err != nil {
-		panic(err)
-	}
-	log.Printf("send handshake: read %d bytes", n)
-	dumpHex(reply[:n])
-
-	if reply[0] != 0x02 {
-		panic("unexpected send handshake reply.")
-	}
-
-	message = make([]byte, 2000)
+	message := make([]byte, 2000)
 	for {
 		n, err := ifce.Read(message)
 		if err != nil {
-			log.Fatal(err)
-			continue
+			panic(err)
 		}
 
-		if message[0] == 0x60 {
+		if message[0] != 0x45 {
+			log.Print("send: dropping non-acceptable (not ipv4 or ihl != 5) packet.")
 			continue
 		}
 

@@ -19,20 +19,8 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-func WebLogin() []byte {
-
-	hostname := ""
-	username := ""
-	password := ""
-
-	fmt.Print("Server hostname(e.g. vpn.nju.edu.cn):")
-	fmt.Scan(&hostname)
-	fmt.Print("Username:")
-	fmt.Scan(&username)
-	fmt.Print("Password:")
-	fmt.Scan(&password)
-
-	server := "https://" + hostname + ":443"
+func WebLogin(server string, username string, password string) string {
+	server = "https://" + server + ":443"
 
 	c := &http.Client{
 		Transport: &http.Transport{
@@ -159,7 +147,11 @@ func WebLogin() []byte {
 
 	log.Printf("Web Login process done.")
 
-	dialConn, err := net.Dial("tcp", hostname+":443")
+	return twfId
+}
+
+func ECAgentToken(server string, twfId string) string {
+	dialConn, err := net.Dial("tcp", server+":443")
 	defer dialConn.Close()
 	conn := utls.UClient(dialConn, &utls.Config{InsecureSkipVerify: true}, utls.HelloGolang)
 	defer conn.Close()
@@ -168,14 +160,15 @@ func WebLogin() []byte {
 	// When you establish a HTTPS connection to server and send a valid request with TWFID to it
 	// The **TLS ServerHello SessionId** is the first part of token
 	log.Printf("ECAgent Request: /por/conf.csp & /por/rclist.csp")
-	io.WriteString(conn, "GET /por/conf.csp HTTP/1.1\r\nHost: "+hostname+"\r\nCookie: TWFID="+twfId+"\r\n\r\nGET /por/rclist.csp HTTP/1.1\r\nHost: "+hostname+"\r\nCookie: TWFID="+twfId+"\r\n\r\n")
+	io.WriteString(conn, "GET /por/conf.csp HTTP/1.1\r\nHost: "+server+"\r\nCookie: TWFID="+twfId+"\r\n\r\nGET /por/rclist.csp HTTP/1.1\r\nHost: "+server+"\r\nCookie: TWFID="+twfId+"\r\n\r\n")
 
 	log.Printf("Server Session ID: %q", conn.HandshakeState.ServerHello.SessionId)
 
-	n, err = conn.Read(buf)
+	buf := make([]byte, 40960)
+	n, err := conn.Read(buf)
 	if n == 0 || err != nil {
 		panic("ECAgent Request invalid: error " + err.Error() + "\n" + string(buf[:n]))
 	}
 
-	return []byte(hex.EncodeToString(conn.HandshakeState.ServerHello.SessionId)[:31] + "\x00" + twfId)
+	return hex.EncodeToString(conn.HandshakeState.ServerHello.SessionId)[:31] + "\x00"
 }
