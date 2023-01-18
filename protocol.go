@@ -2,16 +2,13 @@ package main
 
 import (
 	"crypto/rand"
-	"encoding/binary"
 	"encoding/hex"
-	"io"
 	"log"
 	"net"
 	"os"
-	"strings"
-	"time"
 
 	tls "github.com/refraction-networking/utls"
+	"github.com/songgao/water"
 )
 
 func dumpHex(buf []byte) {
@@ -46,7 +43,7 @@ func tlsConn(server string) (*tls.UConn, error) {
 	return conn, nil
 }
 
-func recvListen(conn *tls.UConn, token *[48]byte, ip *[4]byte) {
+func recvListen(conn *tls.UConn, token *[48]byte, ip *[4]byte, targetDev *water.Interface) {
 	// RECV STREAM START
 	message := []byte{0x06, 0x00, 0x00, 0x00}
 	message = append(message, token[:]...)
@@ -72,23 +69,31 @@ func recvListen(conn *tls.UConn, token *[48]byte, ip *[4]byte) {
 
 	for true {
 		n, err = conn.Read(reply)
+
+		if err != nil {
+			log.Fatal(err)
+			continue
+		}
+
 		log.Printf("recv: read %d bytes", n)
 		dumpHex(reply[:n])
 
-		if strings.Contains(string(reply[:n]), "abcdefghijklmnopqrstuvwabcdefghi") {
-			panic(">>> PING REPLY RECEIVED   TEST PASSED <<<")
+		n, err = targetDev.Write(reply[:n])
+
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		time.Sleep(time.Second)
+		// if strings.Contains(string(reply[:n]), "abcdefghijklmnopqrstuvwabcdefghi") {
+		// 	panic(">>> PING REPLY RECEIVED   TEST PASSED <<<")
+		// }
+
+		// time.Sleep(time.Second)
 	}
 }
 
-func send() {
-
-}
-
-func AskIp(conn *tls.UConn, token *[48]byte) []byte {
-	// ASK IP PACKET
+func QueryIp(conn *tls.UConn, token *[48]byte) []byte {
+	// QUERY IP PACKET
 	message := []byte{0x00, 0x00, 0x00, 0x00}
 	message = append(message, token[:]...)
 	message = append(message, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff}...)
@@ -98,16 +103,16 @@ func AskIp(conn *tls.UConn, token *[48]byte) []byte {
 		panic(err)
 	}
 
-	log.Printf("ask ip: wrote %d bytes", n)
+	log.Printf("query ip: wrote %d bytes", n)
 	dumpHex(message[:n])
 
 	reply := make([]byte, 0x40)
 	n, err = conn.Read(reply)
-	log.Printf("ask ip: read %d bytes", n)
+	log.Printf("query ip: read %d bytes", n)
 	dumpHex(reply[:n])
 
 	if reply[0] != 0x00 {
-		panic("unexpected ask ip reply.")
+		panic("unexpected query ip reply.")
 	}
 
 	return reply[4:8]
@@ -117,16 +122,26 @@ func main() {
 	server := "vpn.nju.edu.cn:443"
 
 	token := WebLogin()
-	// ask IP
+	// query IP
 	conn, err := tlsConn(server)
 	if err != nil {
 		panic(err)
 	}
 	defer conn.Close()
 
-	ip := AskIp(conn, (*[48]byte)(token))
-	log.Printf("IP: %q", ip)
+	ip := QueryIp(conn, (*[48]byte)(token))
+	log.Printf("IP: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
 	ip[0], ip[1], ip[2], ip[3] = ip[3], ip[2], ip[1], ip[0] // reverse the ip slice for future use
+
+	// TUN dev
+	log.Printf("Initializing TUN device...")
+
+	ifce, err := water.New(water.Config{
+		DeviceType: water.TUN,
+	})
+	if err != nil {
+		panic(err)
+	}
 
 	// send conn
 	conn, err = tlsConn(server)
@@ -135,7 +150,7 @@ func main() {
 	}
 	defer conn.Close()
 
-	go recvListen(conn, (*[48]byte)(token), (*[4]byte)(ip))
+	go recvListen(conn, (*[48]byte)(token), (*[4]byte)(ip), ifce)
 
 	// tlsConn for sending data
 	conn, err = tlsConn(server)
@@ -169,21 +184,25 @@ func main() {
 		panic("unexpected send handshake reply.")
 	}
 
-	for true {
-		tmp := []byte("\x45\x00\x00\x3c\x0e\x83\x00\x00\x80\x01\x00\x00" + string([]byte{ip[3], ip[2], ip[1], ip[0]}) + "\xac\x1a\x2c\x51")
-		checksum := CheckSum(tmp)
-		binary.BigEndian.PutUint16(tmp[10:12], checksum)
+	message = make([]byte, 2000)
+	for {
+		n, err := ifce.Read(message)
+		if err != nil {
+			log.Fatal(err)
+			continue
+		}
 
-		message2 := string(tmp) +
-			"\x08\x00\x49\x27\x00\x01\x04\x34\x61\x62\x63\x64" +
-			"\x65\x66\x67\x68\x69\x6a\x6b\x6c\x6d\x6e\x6f\x70\x71\x72\x73\x74" +
-			"\x75\x76\x77\x61\x62\x63\x64\x65\x66\x67\x68\x69"
+		if message[0] == 0x60 {
+			continue
+		}
 
-		n, err = io.WriteString(conn, message2)
+		n, err = conn.Write(message[:n])
+		if err != nil {
+			panic(err)
+		}
+
 		log.Printf("send: wrote %d bytes", n)
-		dumpHex([]byte(message2[:n]))
-
-		time.Sleep(time.Second)
+		dumpHex([]byte(message[:n]))
 	}
 
 	// // HANDSHAKE?
@@ -192,25 +211,4 @@ func main() {
 	// // HEARTBEAT?
 	// // message = message + "\x03\x00\x00\x00" + token + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
 
-}
-
-func CheckSum(data []byte) uint16 {
-	var (
-		sum    uint32
-		length int = len(data)
-		index  int
-	)
-
-	for length > 1 {
-		sum += uint32(data[index])<<8 + uint32(data[index+1])
-		index += 2
-		length -= 2
-	}
-
-	if length > 0 {
-		sum += uint32(data[index])
-	}
-
-	sum += (sum >> 16)
-	return uint16(^sum)
 }
