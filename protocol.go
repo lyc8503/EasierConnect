@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -31,7 +30,7 @@ func TLSConn(server string) (*tls.UConn, error) {
 	conn := tls.UClient(dialConn, &tls.Config{InsecureSkipVerify: true}, tls.HelloCustom)
 
 	random := make([]byte, 32)
-	_, err = rand.Read(random) // Ignore the err
+	rand.Read(random) // Ignore the err
 	conn.SetClientRandom(random)
 	conn.SetTLSVers(tls.VersionTLS11, tls.VersionTLS11, []tls.TLSExtension{})
 	conn.HandshakeState.Hello.Vers = tls.VersionTLS11
@@ -54,7 +53,8 @@ func MustTLSConn(server string) *tls.UConn {
 
 func MustQueryIp(server string, token *[48]byte) []byte {
 	conn := MustTLSConn(server)
-	defer conn.Close()
+	// defer conn.Close()
+	// Query IP conn CAN NOT be closed, otherwise tx/rx handshake will fail
 
 	// QUERY IP PACKET
 	message := []byte{0x00, 0x00, 0x00, 0x00}
@@ -71,6 +71,10 @@ func MustQueryIp(server string, token *[48]byte) []byte {
 
 	reply := make([]byte, 0x40)
 	n, err = conn.Read(reply)
+	if err != nil {
+		panic(err)
+	}
+
 	log.Printf("query ip: read %d bytes", n)
 	DumpHex(reply[:n])
 
@@ -81,7 +85,7 @@ func MustQueryIp(server string, token *[48]byte) []byte {
 	return reply[4:8]
 }
 
-func StartRXStream(ctx context.Context, server string, token *[48]byte, ipRev *[4]byte, inbound chan []byte) {
+func BlockRXStream(server string, token *[48]byte, ipRev *[4]byte, inbound chan []byte) error {
 	conn, err := TLSConn(server)
 	if err != nil {
 		panic(err)
@@ -92,55 +96,45 @@ func StartRXStream(ctx context.Context, server string, token *[48]byte, ipRev *[
 	message := []byte{0x06, 0x00, 0x00, 0x00}
 	message = append(message, token[:]...)
 	message = append(message, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}...)
-	message = append(message, ip[:]...)
+	message = append(message, ipRev[:]...)
 
 	n, err := conn.Write(message)
-
 	if err != nil {
-		panic(err)
+		return err
 	}
 	log.Printf("recv handshake: wrote %d bytes", n)
 	DumpHex(message[:n])
 
 	reply := make([]byte, 1500)
 	n, err = conn.Read(reply)
+	if err != nil {
+		return err
+	}
 	log.Printf("recv handshake: read %d bytes", n)
 	DumpHex(reply[:n])
 
 	if reply[0] != 0x01 {
-		return errors.New("unexpected recv handshake reply.")
+		return errors.New("unexpected recv handshake reply")
 	}
 
-	for true {
+	for {
 		n, err = conn.Read(reply)
 
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		log.Printf("recv: read %d bytes", n)
+		inbound <- reply[:n]
+
 		DumpHex(reply[:n])
-
-		n, err = targetDev.Write(reply[:n])
-
-		if err != nil {
-			panic(err)
-		}
-
-		// if strings.Contains(string(reply[:n]), "abcdefghijklmnopqrstuvwabcdefghi") {
-		// 	panic(">>> PING REPLY RECEIVED   TEST PASSED <<<")
-		// }
-
-		// time.Sleep(time.Second)
 	}
-
-	return nil
 }
 
-func StartTXStream(ctx context.Context, server string, token *[48]byte, ipRev *[4]byte, outbound chan []byte) {
+func BlockTXStream(server string, token *[48]byte, ipRev *[4]byte, outbound chan []byte) error {
 	conn, err := TLSConn(server)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer conn.Close()
 
@@ -148,7 +142,7 @@ func StartTXStream(ctx context.Context, server string, token *[48]byte, ipRev *[
 	message := []byte{0x05, 0x00, 0x00, 0x00}
 	message = append(message, token[:]...)
 	message = append(message, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}...)
-	message = append(message, ip[:]...)
+	message = append(message, ipRev[:]...)
 
 	n, err := conn.Write(message)
 	if err != nil {
@@ -166,27 +160,48 @@ func StartTXStream(ctx context.Context, server string, token *[48]byte, ipRev *[
 	DumpHex(reply[:n])
 
 	if reply[0] != 0x02 {
-		return errors.New("unexpected send handshake reply.")
+		return errors.New("unexpected send handshake reply")
 	}
 
-	message := make([]byte, 2000)
+	for {
+		message = <-outbound
 
-	n, err = conn.Write(message[:n])
-	if err != nil {
-		panic(err)
+		n, err = conn.Write(message)
+		if err != nil {
+			return err
+		}
+
+		log.Printf("send: wrote %d bytes", n)
+		DumpHex([]byte(message[:n]))
 	}
-
-	log.Printf("send: wrote %d bytes", n)
-	DumpHex([]byte(message[:n]))
-
-	return nil
 }
 
-func StartProtocol(ctx context.Context, server string, token *[48]byte, ipRev *[4]byte) {
+func StartProtocol(inbound chan []byte, outbound chan []byte, server string, token *[48]byte, ipRev *[4]byte) {
+	RX := func() {
+		counter := 0
+		for counter < 3 {
+			err := BlockRXStream(server, token, ipRev, inbound)
+			if err != nil {
+				log.Print("Error occurred while recv, retrying: " + err.Error())
+			}
+			counter += 1
+		}
+		panic("recv retry limit exceeded.")
+	}
 
-	go StartRXStream()
-	go StartTXStream()
+	go RX()
 
+	TX := func() {
+		counter := 0
+		for counter < 3 {
+			err := BlockTXStream(server, token, ipRev, outbound)
+			if err != nil {
+				log.Print("Error occurred while send, retrying: " + err.Error())
+			}
+			counter += 1
+		}
+		panic("send retry limit exceeded.")
+	}
 
-
+	go TX()
 }

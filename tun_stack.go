@@ -1,11 +1,8 @@
 package main
 
 import (
-	"context"
-	"log"
-
+	"gvisor.dev/gvisor/pkg/bufferv2"
 	"gvisor.dev/gvisor/pkg/tcpip"
-	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -56,21 +53,17 @@ func (ep *EasyConnectEndpoint) ARPHardwareType() header.ARPHardwareType {
 func (ep *EasyConnectEndpoint) AddHeader(buffer *stack.PacketBuffer) {}
 
 func (ep *EasyConnectEndpoint) WritePackets(list stack.PacketBufferList) (int, tcpip.Error) {
-	// ep.dispatcher.DeliverNetworkPacket()
 	for _, packetBuffer := range list.AsSlice() {
-		packetBuffer.IncRef()
-		// select {
-		// 	case <-ep.done:
-		// 		return 0, &tcpip.ErrClosedForSend{}
-		// 	case ep.outbound <- packetBuffer:
-		// }
-
-		log.Print(packetBuffer.AsSlices())
+		buf := []byte{}
+		for _, t := range packetBuffer.AsSlices() {
+			buf = append(buf, t...)
+		}
+		ep.outbound <- buf
 	}
 	return list.Len(), nil
 }
 
-func SetupStack(ip []byte, inbound chan []byte, outbound chan []byte) {
+func SetupStack(ip []byte, inbound chan []byte, outbound chan []byte) *stack.Stack{
 
 	// init IP stack
 	ipStack := stack.New(stack.Options{
@@ -80,7 +73,24 @@ func SetupStack(ip []byte, inbound chan []byte, outbound chan []byte) {
 	})
 
 	// custom link endpoint & nic
-	endpoint := EasyConnectEndpoint{}
+	endpoint := EasyConnectEndpoint{
+		inbound:  inbound,
+		outbound: outbound,
+	}
+
+	go func() {
+		for {
+			buf := <-inbound
+			if endpoint.IsAttached() {
+				packetBuffer := stack.NewPacketBuffer(stack.PacketBufferOptions{
+					Payload: bufferv2.MakeWithData(buf),
+				})
+				endpoint.dispatcher.DeliverNetworkPacket(header.IPv4ProtocolNumber, packetBuffer)
+				packetBuffer.DecRef()
+			}
+		}
+	}()
+
 	err := ipStack.CreateNIC(defaultNIC, &endpoint)
 	if err != nil {
 		panic(err)
@@ -99,7 +109,6 @@ func SetupStack(ip []byte, inbound chan []byte, outbound chan []byte) {
 	err = ipStack.AddProtocolAddress(defaultNIC, protoAddr, stack.AddressProperties{})
 	if err != nil {
 		panic(err)
-		// return nil, errors.New("parse local address ", protoAddr.AddressWithPrefix, ": ", err.String())
 	}
 
 	// other settings
@@ -109,23 +118,5 @@ func SetupStack(ip []byte, inbound chan []byte, outbound chan []byte) {
 	ipStack.SetTransportProtocolOption(tcp.ProtocolNumber, &cOpt)
 	ipStack.AddRoute(tcpip.Route{Destination: header.IPv4EmptySubnet, NIC: defaultNIC})
 
-	// Now the stack is available
-	addrTarget := tcpip.FullAddress{
-		NIC:  defaultNIC,
-		Port: 2333,
-		Addr: tcpip.Address([]byte{1, 1, 1, 1}),
-	}
-
-	bind := tcpip.FullAddress{
-		NIC:  defaultNIC,
-		Addr: tcpip.Address([]byte{1, 2, 3, 4}),
-	}
-
-	tcpConn, tcpErr := gonet.DialTCPWithBind(context.Background(), ipStack, bind, addrTarget, header.IPv4ProtocolNumber)
-
-	log.Print(tcpErr)
-	tcpConn.Write([]byte("GET /"))
-
-	buf := make([]byte, 1024)
-	tcpConn.Read(buf)
+	return ipStack
 }
