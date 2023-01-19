@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net"
+	"strconv"
+	"strings"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
@@ -22,18 +23,21 @@ func ServeSocks5(ipStack *stack.Stack, selfIp []byte, bindAddr string) {
 				return nil, errors.New("only support tcp")
 			}
 
-			var ip1, ip2, ip3, ip4 byte
-			var port uint16
-			n, err := fmt.Sscanf(addr, "%d.%d.%d.%d:%d", &ip1, &ip2, &ip3, &ip4, &port)
+			parts := strings.Split(addr, ":")
+			target, err := net.ResolveIPAddr("ip", parts[0])
+			if err != nil {
+				return nil, errors.New("resolve ip addr failed: " + parts[0])
+			}
 
-			if n != 5 || err != nil {
-				return nil, errors.New("parse ipv4 addr failed")
+			port, err := strconv.Atoi(parts[1])
+			if err != nil {
+				return nil, errors.New("invalid port: " + parts[1])
 			}
 
 			addrTarget := tcpip.FullAddress{
 				NIC:  defaultNIC,
-				Port: port,
-				Addr: tcpip.Address([]byte{ip1, ip2, ip3, ip4}),
+				Port: uint16(port),
+				Addr: tcpip.Address(target.IP),
 			}
 
 			bind := tcpip.FullAddress{
