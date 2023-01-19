@@ -51,7 +51,7 @@ func MustTLSConn(server string) *tls.UConn {
 	return conn
 }
 
-func MustQueryIp(server string, token *[48]byte) []byte {
+func MustQueryIp(server string, token *[48]byte) ([]byte, *tls.UConn) {
 	conn := MustTLSConn(server)
 	// defer conn.Close()
 	// Query IP conn CAN NOT be closed, otherwise tx/rx handshake will fail
@@ -69,7 +69,7 @@ func MustQueryIp(server string, token *[48]byte) []byte {
 	log.Printf("query ip: wrote %d bytes", n)
 	DumpHex(message[:n])
 
-	reply := make([]byte, 0x40)
+	reply := make([]byte, 0x80)
 	n, err = conn.Read(reply)
 	if err != nil {
 		panic(err)
@@ -82,7 +82,7 @@ func MustQueryIp(server string, token *[48]byte) []byte {
 		panic("unexpected query ip reply.")
 	}
 
-	return reply[4:8]
+	return reply[4:8], conn
 }
 
 func BlockRXStream(server string, token *[48]byte, ipRev *[4]byte, inbound chan []byte) error {

@@ -24,8 +24,9 @@ func main() {
 	agentToken := ECAgentToken(server, twfId)
 	token := (*[48]byte)([]byte(agentToken + twfId))
 
-	// Query IP
-	ip := MustQueryIp(server+":443", token)
+	// Query IP (keep the connection used so it's not closed too early, otherwise i/o stream will be closed)
+	ip, conn := MustQueryIp(server+":443", token)
+	defer conn.Close()
 	log.Printf("IP: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
 
 	// channels for outbound & inbound (relative to local machine)
