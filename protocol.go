@@ -85,7 +85,7 @@ func MustQueryIp(server string, token *[48]byte) ([]byte, *tls.UConn) {
 	return reply[4:8], conn
 }
 
-func BlockRXStream(server string, token *[48]byte, ipRev *[4]byte, inbound chan []byte, debug bool) error {
+func BlockRXStream(server string, token *[48]byte, ipRev *[4]byte, ep *EasyConnectEndpoint, debug bool) error {
 	conn, err := TLSConn(server)
 	if err != nil {
 		panic(err)
@@ -124,7 +124,7 @@ func BlockRXStream(server string, token *[48]byte, ipRev *[4]byte, inbound chan 
 			return err
 		}
 
-		inbound <- reply[:n]
+		ep.WriteTo(reply[:n])
 
 		if debug {
 			log.Printf("recv: read %d bytes", n)
@@ -133,7 +133,7 @@ func BlockRXStream(server string, token *[48]byte, ipRev *[4]byte, inbound chan 
 	}
 }
 
-func BlockTXStream(server string, token *[48]byte, ipRev *[4]byte, outbound chan []byte, debug bool) error {
+func BlockTXStream(server string, token *[48]byte, ipRev *[4]byte, ep *EasyConnectEndpoint, debug bool) error {
 	conn, err := TLSConn(server)
 	if err != nil {
 		return err
@@ -165,26 +165,29 @@ func BlockTXStream(server string, token *[48]byte, ipRev *[4]byte, outbound chan
 		return errors.New("unexpected send handshake reply")
 	}
 
-	for {
-		message = <-outbound
+	errCh := make(chan error)
 
-		n, err = conn.Write(message)
+	ep.OnRecv = func(buf []byte) {
+		n, err = conn.Write(buf)
 		if err != nil {
-			return err
+			errCh <- err
+			return
 		}
 
 		if debug {
 			log.Printf("send: wrote %d bytes", n)
-			DumpHex([]byte(message[:n]))
+			DumpHex([]byte(buf[:n]))
 		}
 	}
+
+	return <-errCh
 }
 
-func StartProtocol(inbound chan []byte, outbound chan []byte, server string, token *[48]byte, ipRev *[4]byte, debug bool) {
+func StartProtocol(endpoint *EasyConnectEndpoint, server string, token *[48]byte, ipRev *[4]byte, debug bool) {
 	RX := func() {
 		counter := 0
-		for counter < 3 {
-			err := BlockRXStream(server, token, ipRev, inbound, debug)
+		for counter < 5 {
+			err := BlockRXStream(server, token, ipRev, endpoint, debug)
 			if err != nil {
 				log.Print("Error occurred while recv, retrying: " + err.Error())
 			}
@@ -197,8 +200,8 @@ func StartProtocol(inbound chan []byte, outbound chan []byte, server string, tok
 
 	TX := func() {
 		counter := 0
-		for counter < 3 {
-			err := BlockTXStream(server, token, ipRev, outbound, debug)
+		for counter < 5 {
+			err := BlockTXStream(server, token, ipRev, endpoint, debug)
 			if err != nil {
 				log.Print("Error occurred while send, retrying: " + err.Error())
 			}

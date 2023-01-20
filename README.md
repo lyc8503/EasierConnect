@@ -26,7 +26,7 @@ To-do:
 - [x] Get Session ID & IP
 - [x] Socks to L3
 - [x] Better code formatting & better logging
-- [ ] Performace improvement
+- [x] Performace improvement
 - [ ] Support 7.6.3 versions
-- [ ] Better error handling
+- [x] Better error handling
 - [ ] Pack & Release

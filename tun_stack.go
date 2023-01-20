@@ -16,8 +16,7 @@ const defaultMTU uint32 = 1400
 // implements LinkEndpoint
 type EasyConnectEndpoint struct {
 	dispatcher stack.NetworkDispatcher
-	inbound    chan []byte
-	outbound   chan []byte
+	OnRecv     func(buf []byte)
 }
 
 func (ep *EasyConnectEndpoint) MTU() uint32 {
@@ -58,12 +57,25 @@ func (ep *EasyConnectEndpoint) WritePackets(list stack.PacketBufferList) (int, t
 		for _, t := range packetBuffer.AsSlices() {
 			buf = append(buf, t...)
 		}
-		ep.outbound <- buf
+		
+		if ep.OnRecv != nil {
+			ep.OnRecv(buf)
+		}
 	}
 	return list.Len(), nil
 }
 
-func SetupStack(ip []byte, inbound chan []byte, outbound chan []byte) *stack.Stack{
+func (ep *EasyConnectEndpoint) WriteTo(buf []byte) {
+	if ep.IsAttached() {
+		packetBuffer := stack.NewPacketBuffer(stack.PacketBufferOptions{
+			Payload: bufferv2.MakeWithData(buf),
+		})
+		ep.dispatcher.DeliverNetworkPacket(header.IPv4ProtocolNumber, packetBuffer)
+		packetBuffer.DecRef()
+	}
+}
+
+func SetupStack(ip []byte, endpoint *EasyConnectEndpoint) *stack.Stack {
 
 	// init IP stack
 	ipStack := stack.New(stack.Options{
@@ -72,26 +84,8 @@ func SetupStack(ip []byte, inbound chan []byte, outbound chan []byte) *stack.Sta
 		HandleLocal:        true,
 	})
 
-	// custom link endpoint & nic
-	endpoint := EasyConnectEndpoint{
-		inbound:  inbound,
-		outbound: outbound,
-	}
-
-	go func() {
-		for {
-			buf := <-inbound
-			if endpoint.IsAttached() {
-				packetBuffer := stack.NewPacketBuffer(stack.PacketBufferOptions{
-					Payload: bufferv2.MakeWithData(buf),
-				})
-				endpoint.dispatcher.DeliverNetworkPacket(header.IPv4ProtocolNumber, packetBuffer)
-				packetBuffer.DecRef()
-			}
-		}
-	}()
-
-	err := ipStack.CreateNIC(defaultNIC, &endpoint)
+	// create NIC associated to the endpoint
+	err := ipStack.CreateNIC(defaultNIC, endpoint)
 	if err != nil {
 		panic(err)
 	}

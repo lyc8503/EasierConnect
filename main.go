@@ -31,12 +31,12 @@ func main() {
 	defer conn.Close()
 	log.Printf("IP: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
 
-	// channels for outbound & inbound (relative to local machine)
-	outbound, inbound := make(chan []byte, 64), make(chan []byte, 64)
-	ipStack := SetupStack(ip, inbound, outbound)
+	// Link-level endpoint used in gvisor netstack
+	endpoint := &EasyConnectEndpoint{}
+	ipStack := SetupStack(ip, endpoint)
 
 	// Sangfor Easyconnect protocol
-	StartProtocol(inbound, outbound, server+":443", token, &[4]byte{ip[3], ip[2], ip[1], ip[0]}, debugDump)
+	StartProtocol(endpoint, server+":443", token, &[4]byte{ip[3], ip[2], ip[1], ip[0]}, debugDump)
 
 	// Socks5 server
 	ServeSocks5(ipStack, ip, socksBind)
