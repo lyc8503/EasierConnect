@@ -85,7 +85,7 @@ func MustQueryIp(server string, token *[48]byte) ([]byte, *tls.UConn) {
 	return reply[4:8], conn
 }
 
-func BlockRXStream(server string, token *[48]byte, ipRev *[4]byte, inbound chan []byte) error {
+func BlockRXStream(server string, token *[48]byte, ipRev *[4]byte, inbound chan []byte, debug bool) error {
 	conn, err := TLSConn(server)
 	if err != nil {
 		panic(err)
@@ -124,14 +124,16 @@ func BlockRXStream(server string, token *[48]byte, ipRev *[4]byte, inbound chan 
 			return err
 		}
 
-		log.Printf("recv: read %d bytes", n)
 		inbound <- reply[:n]
 
-		DumpHex(reply[:n])
+		if debug {
+			log.Printf("recv: read %d bytes", n)
+			DumpHex(reply[:n])
+		}
 	}
 }
 
-func BlockTXStream(server string, token *[48]byte, ipRev *[4]byte, outbound chan []byte) error {
+func BlockTXStream(server string, token *[48]byte, ipRev *[4]byte, outbound chan []byte, debug bool) error {
 	conn, err := TLSConn(server)
 	if err != nil {
 		return err
@@ -171,16 +173,18 @@ func BlockTXStream(server string, token *[48]byte, ipRev *[4]byte, outbound chan
 			return err
 		}
 
-		log.Printf("send: wrote %d bytes", n)
-		DumpHex([]byte(message[:n]))
+		if debug {
+			log.Printf("send: wrote %d bytes", n)
+			DumpHex([]byte(message[:n]))
+		}
 	}
 }
 
-func StartProtocol(inbound chan []byte, outbound chan []byte, server string, token *[48]byte, ipRev *[4]byte) {
+func StartProtocol(inbound chan []byte, outbound chan []byte, server string, token *[48]byte, ipRev *[4]byte, debug bool) {
 	RX := func() {
 		counter := 0
 		for counter < 3 {
-			err := BlockRXStream(server, token, ipRev, inbound)
+			err := BlockRXStream(server, token, ipRev, inbound, debug)
 			if err != nil {
 				log.Print("Error occurred while recv, retrying: " + err.Error())
 			}
@@ -194,7 +198,7 @@ func StartProtocol(inbound chan []byte, outbound chan []byte, server string, tok
 	TX := func() {
 		counter := 0
 		for counter < 3 {
-			err := BlockTXStream(server, token, ipRev, outbound)
+			err := BlockTXStream(server, token, ipRev, outbound, debug)
 			if err != nil {
 				log.Print("Error occurred while send, retrying: " + err.Error())
 			}

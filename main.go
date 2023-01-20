@@ -13,6 +13,8 @@ func main() {
 	flag.StringVar(&username, "username", "", "Your username")
 	flag.StringVar(&password, "password", "", "Your password")
 	flag.StringVar(&socksBind, "socks-bind", ":1080", "The addr socks5 server listens on (e.g. 0.0.0.0:1080)")
+	debugDump := false
+	flag.BoolVar(&debugDump, "debug-dump", false, "Enable traffic debug dump (only for debug usage)")
 	flag.Parse()
 
 	if server == "" || username == "" || password == "" {
@@ -34,7 +36,7 @@ func main() {
 	ipStack := SetupStack(ip, inbound, outbound)
 
 	// Sangfor Easyconnect protocol
-	StartProtocol(inbound, outbound, server+":443", token, &[4]byte{ip[3], ip[2], ip[1], ip[0]})
+	StartProtocol(inbound, outbound, server+":443", token, &[4]byte{ip[3], ip[2], ip[1], ip[0]}, debugDump)
 
 	// Socks5 server
 	ServeSocks5(ipStack, ip, socksBind)

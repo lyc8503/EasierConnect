@@ -19,6 +19,8 @@ func ServeSocks5(ipStack *stack.Stack, selfIp []byte, bindAddr string) {
 	server := socks5.Server{
 		Dialer: func(ctx context.Context, network, addr string) (net.Conn, error) {
 
+			log.Printf("socks dial: %s", addr)
+
 			if network != "tcp" {
 				return nil, errors.New("only support tcp")
 			}
