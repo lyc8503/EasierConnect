@@ -17,16 +17,15 @@ Release 中的 Windows 预编译二进制在 VirusTotal 上被少数杀软报毒
 
 
 Complete: 
-- [x] Protocol reverse engineering
-- [x] Web login reverse engineering
-- [x] ~~**now Works on Linux TUN**~~
-- [x] **now Works on All platforms(maybe) with socks5**
-
-To-do: 
+- [x] Web login & binary protocol reimplement
 - [x] Get Session ID & IP
 - [x] Socks to L3
+- [x] Support 7.6.x versions
 - [x] Better code formatting & better logging
 - [x] Performace improvement
-- [ ] Support 7.6.3 versions
-- [x] Better error handling
-- [ ] Pack & Release
+- [x] ~~**now Works on Linux TUN**~~
+- [x] **now Works on All platforms(maybe) with socks5**
+- [x] Pack & Release
+
+To-do: 
+- [ ] More tests

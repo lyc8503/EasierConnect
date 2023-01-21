@@ -49,8 +49,14 @@ func WebLogin(server string, username string, password string) string {
 	rsaExp := string(regexp.MustCompile(`<RSA_ENCRYPT_EXP>(.*)</RSA_ENCRYPT_EXP>`).FindSubmatch(buf[:n])[1])
 	log.Printf("RSA Exp: %s", rsaExp)
 
-	csrfCode := string(regexp.MustCompile(`<CSRF_RAND_CODE>(.*)</CSRF_RAND_CODE>`).FindSubmatch(buf[:n])[1])
+	csrfMatch := regexp.MustCompile(`<CSRF_RAND_CODE>(.*)</CSRF_RAND_CODE>`).FindSubmatch(buf[:n])
+ 	csrfCode := "WARNING: No Match. Maybe you're connecting to an older server? Continue anyway..."
+	if csrfMatch != nil {
+		csrfCode = string(csrfMatch[1])
+		password += "_" + csrfCode
+	}
 	log.Printf("CSRF Code: %s", csrfCode)
+	log.Printf("Password to encrypt: %s", password)
 
 	pubKey := rsa.PublicKey{}
 	pubKey.E, _ = strconv.Atoi(rsaExp)
@@ -58,14 +64,14 @@ func WebLogin(server string, username string, password string) string {
 	moduls.SetString(rsaKey, 16)
 	pubKey.N = &moduls
 
-	encryptedPassword, err := rsa.EncryptPKCS1v15(rand.Reader, &pubKey, []byte(password+"_"+csrfCode))
+	encryptedPassword, err := rsa.EncryptPKCS1v15(rand.Reader, &pubKey, []byte(password))
 	if err != nil {
 		panic(err)
 	}
 	encryptedPasswordHex := hex.EncodeToString(encryptedPassword)
 	log.Printf("Encrypted Password: %s", encryptedPasswordHex)
 
-	addr = server + "/por/login_psw.csp?anti_replay=1&encrypt=1"
+	addr = server + "/por/login_psw.csp?anti_replay=1&encrypt=1&type=cs"
 	log.Printf("Login Request: %s", addr)
 
 	form := url.Values{
@@ -87,11 +93,13 @@ func WebLogin(server string, username string, password string) string {
 	n, _ = resp.Body.Read(buf)
 	defer resp.Body.Close()
 
-	if !strings.Contains(string(buf[:n]), "Auth is success") {
+	if strings.Contains(string(buf[:n]), "<Result>0</Result>") {
 		panic("Login FAILED: " + string(buf[:n]))
 	}
 
-	if strings.Contains(string(buf[:n]), "<NextService>auth/sms</NextService>") {
+	if strings.Contains(string(buf[:n]), "<NextAuth>-1</NextAuth>") {
+		log.Print("No NextAuth found.")
+	} else if strings.Contains(string(buf[:n]), "<NextService>auth/sms</NextService>") {
 		log.Print("SMS code required")
 
 		addr = server + "/por/login_sms.csp?apiversion=1"
@@ -142,7 +150,7 @@ func WebLogin(server string, username string, password string) string {
 		log.Print("SMS Code verification SUCCESS")
 
 	} else {
-		panic("not implemented: sms not required")
+		panic("Not implemented auth: " + string(buf[:n]))
 	}
 
 	log.Printf("Web Login process done.")
