@@ -50,12 +50,14 @@ func WebLogin(server string, username string, password string) string {
 	log.Printf("RSA Exp: %s", rsaExp)
 
 	csrfMatch := regexp.MustCompile(`<CSRF_RAND_CODE>(.*)</CSRF_RAND_CODE>`).FindSubmatch(buf[:n])
- 	csrfCode := "WARNING: No Match. Maybe you're connecting to an older server? Continue anyway..."
+	csrfCode := ""
 	if csrfMatch != nil {
 		csrfCode = string(csrfMatch[1])
+		log.Printf("CSRF Code: %s", csrfCode)
 		password += "_" + csrfCode
+	} else {
+		log.Printf("WARNING: No CSRF Code Match. Maybe you're connecting to an older server? Continue anyway...")
 	}
-	log.Printf("CSRF Code: %s", csrfCode)
 	log.Printf("Password to encrypt: %s", password)
 
 	pubKey := rsa.PublicKey{}
