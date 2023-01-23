@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"gvisor.dev/gvisor/pkg/bufferv2"
@@ -57,7 +57,7 @@ func (ep *EasyConnectEndpoint) WritePackets(list stack.PacketBufferList) (int, t
 		for _, t := range packetBuffer.AsSlices() {
 			buf = append(buf, t...)
 		}
-		
+
 		if ep.OnRecv != nil {
 			ep.OnRecv(buf)
 		}
