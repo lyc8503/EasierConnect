@@ -5,7 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"encoding/hex"
-	"fmt"
+	"errors"
 	"io"
 	"log"
 	"math/big"
@@ -13,13 +13,16 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
 	utls "github.com/refraction-networking/utls"
 )
 
-func WebLogin(server string, username string, password string) string {
+var ERR_NEXT_AUTH_SMS = errors.New("SMS Code required.")
+
+func WebLogin(server string, username string, password string) (string, error) {
 	server = "https://" + server
 
 	c := &http.Client{
@@ -32,7 +35,8 @@ func WebLogin(server string, username string, password string) string {
 
 	resp, err := c.Get(addr)
 	if err != nil {
-		panic(err)
+		debug.PrintStack()
+		return "", err
 	}
 
 	defer resp.Body.Close()
@@ -68,7 +72,8 @@ func WebLogin(server string, username string, password string) string {
 
 	encryptedPassword, err := rsa.EncryptPKCS1v15(rand.Reader, &pubKey, []byte(password))
 	if err != nil {
-		panic(err)
+		debug.PrintStack()
+		return "", err
 	}
 	encryptedPasswordHex := hex.EncodeToString(encryptedPassword)
 	log.Printf("Encrypted Password: %s", encryptedPasswordHex)
@@ -89,78 +94,104 @@ func WebLogin(server string, username string, password string) string {
 
 	resp, err = c.Do(req)
 	if err != nil {
-		panic(err)
+		debug.PrintStack()
+		return "", err
 	}
 
 	n, _ = resp.Body.Read(buf)
 	defer resp.Body.Close()
 
-	if strings.Contains(string(buf[:n]), "<Result>0</Result>") {
-		panic("Login FAILED: " + string(buf[:n]))
-	}
+	// log.Printf("First stage login response: %s", string(buf[:n]))
 
-	if strings.Contains(string(buf[:n]), "<NextAuth>-1</NextAuth>") {
-		log.Print("No NextAuth found.")
-	} else if strings.Contains(string(buf[:n]), "<NextService>auth/sms</NextService>") {
-		log.Print("SMS code required")
+	// SMS Code Process
+	if strings.Contains(string(buf[:n]), "<NextService>auth/sms</NextService>") {
+		log.Print("SMS code required.")
 
 		addr = server + "/por/login_sms.csp?apiversion=1"
 		log.Printf("SMS Request: " + addr)
-		req, err := http.NewRequest("POST", addr, nil)
+		req, err = http.NewRequest("POST", addr, nil)
 		req.Header.Set("Cookie", "TWFID="+twfId)
 
 		resp, err = c.Do(req)
 		if err != nil {
-			panic(err)
+			debug.PrintStack()
+			return "", err
 		}
 
-		n, _ = resp.Body.Read(buf)
+		n, _ := resp.Body.Read(buf)
 		defer resp.Body.Close()
 
 		if !strings.Contains(string(buf[:n]), "验证码已发送到您的手机") {
-			panic("unexpected sms resp: " + string(buf[:n]))
+			debug.PrintStack()
+			return "", errors.New("unexpected sms resp: " + string(buf[:n]))
 		}
 
 		log.Printf("SMS Code is sent or still valid.")
 
-		fmt.Print(">>>Please enter your sms code<<<:")
-		smsCode := ""
-		fmt.Scan(&smsCode)
+		return twfId, ERR_NEXT_AUTH_SMS
+	}
 
-		addr = server + "/por/login_sms1.csp?apiversion=1"
-		log.Printf("SMS Request: " + addr)
-		form := url.Values{
-			"svpn_inputsms": {smsCode},
-		}
-
-		req, err = http.NewRequest("POST", addr, strings.NewReader(form.Encode()))
-		req.Header.Set("Cookie", "TWFID="+twfId)
-
-		resp, err = c.Do(req)
-		if err != nil {
-			panic(err)
-		}
-
-		n, _ = resp.Body.Read(buf)
-		defer resp.Body.Close()
-
-		if !strings.Contains(string(buf[:n]), "Auth sms suc") {
-			panic("SMS Code verification FAILED: " + string(buf[:n]))
-		}
-
-		twfId = string(regexp.MustCompile(`<TwfID>(.*)</TwfID>`).FindSubmatch(buf[:n])[1])
-		log.Print("SMS Code verification SUCCESS")
-
+	if strings.Contains(string(buf[:n]), "<NextAuth>-1</NextAuth>") || !strings.Contains(string(buf[:n]), "<NextAuth>") {
+		log.Print("No NextAuth found.")
 	} else {
-		panic("Not implemented auth: " + string(buf[:n]))
+		debug.PrintStack()
+		return "", errors.New("Not implemented auth: " + string(buf[:n]))
+	}
+
+	if !strings.Contains(string(buf[:n]), "<Result>1</Result>") {
+		debug.PrintStack()
+		return "", errors.New("Login FAILED: " + string(buf[:n]))
+	}
+
+	twfIdMatch := regexp.MustCompile(`<TwfID>(.*)</TwfID>`).FindSubmatch(buf[:n])
+	if twfIdMatch != nil {
+		twfId = string(twfIdMatch[1])
+		log.Printf("Update twfId: %s", twfId)
 	}
 
 	log.Printf("Web Login process done.")
 
-	return twfId
+	return twfId, nil
 }
 
-func ECAgentToken(server string, twfId string) string {
+func AuthSms(server string, username string, password string, twfId string, smsCode string) (string, error) {
+	c := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}}
+
+	buf := make([]byte, 40960)
+
+	addr := "https://" + server + "/por/login_sms1.csp?apiversion=1"
+	log.Printf("SMS Request: " + addr)
+	form := url.Values{
+		"svpn_inputsms": {smsCode},
+	}
+
+	req, err := http.NewRequest("POST", addr, strings.NewReader(form.Encode()))
+	req.Header.Set("Cookie", "TWFID="+twfId)
+
+	resp, err := c.Do(req)
+	if err != nil {
+		debug.PrintStack()
+		return "", err
+	}
+
+	n, _ := resp.Body.Read(buf)
+	defer resp.Body.Close()
+
+	if !strings.Contains(string(buf[:n]), "Auth sms suc") {
+		debug.PrintStack()
+		return "", errors.New("SMS Code verification FAILED: " + string(buf[:n]))
+	}
+
+	twfId = string(regexp.MustCompile(`<TwfID>(.*)</TwfID>`).FindSubmatch(buf[:n])[1])
+	log.Print("SMS Code verification SUCCESS")
+
+	return twfId, nil
+}
+
+func ECAgentToken(server string, twfId string) (string, error) {
 	dialConn, err := net.Dial("tcp", server)
 	defer dialConn.Close()
 	conn := utls.UClient(dialConn, &utls.Config{InsecureSkipVerify: true}, utls.HelloGolang)
@@ -177,8 +208,9 @@ func ECAgentToken(server string, twfId string) string {
 	buf := make([]byte, 40960)
 	n, err := conn.Read(buf)
 	if n == 0 || err != nil {
-		panic("ECAgent Request invalid: error " + err.Error() + "\n" + string(buf[:n]))
+		debug.PrintStack()
+		return "", errors.New("ECAgent Request invalid: error " + err.Error() + "\n" + string(buf[:n]))
 	}
 
-	return hex.EncodeToString(conn.HandshakeState.ServerHello.SessionId)[:31] + "\x00"
+	return hex.EncodeToString(conn.HandshakeState.ServerHello.SessionId)[:31] + "\x00", nil
 }

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"runtime/debug"
 
 	tls "github.com/refraction-networking/utls"
 )
@@ -43,16 +44,12 @@ func TLSConn(server string) (*tls.UConn, error) {
 	return conn, nil
 }
 
-func MustTLSConn(server string) *tls.UConn {
+func QueryIp(server string, token *[48]byte) ([]byte, *tls.UConn, error) {
 	conn, err := TLSConn(server)
 	if err != nil {
-		panic(err)
+		debug.PrintStack()
+		return nil, nil, err
 	}
-	return conn
-}
-
-func MustQueryIp(server string, token *[48]byte) ([]byte, *tls.UConn) {
-	conn := MustTLSConn(server)
 	// defer conn.Close()
 	// Query IP conn CAN NOT be closed, otherwise tx/rx handshake will fail
 
@@ -63,7 +60,8 @@ func MustQueryIp(server string, token *[48]byte) ([]byte, *tls.UConn) {
 
 	n, err := conn.Write(message)
 	if err != nil {
-		panic(err)
+		debug.PrintStack()
+		return nil, nil, err
 	}
 
 	log.Printf("query ip: wrote %d bytes", n)
@@ -72,17 +70,19 @@ func MustQueryIp(server string, token *[48]byte) ([]byte, *tls.UConn) {
 	reply := make([]byte, 0x80)
 	n, err = conn.Read(reply)
 	if err != nil {
-		panic(err)
+		debug.PrintStack()
+		return nil, nil, err
 	}
 
 	log.Printf("query ip: read %d bytes", n)
 	DumpHex(reply[:n])
 
 	if reply[0] != 0x00 {
-		panic("unexpected query ip reply.")
+		debug.PrintStack()
+		return nil, nil, errors.New("unexpected query ip reply")
 	}
 
-	return reply[4:8], conn
+	return reply[4:8], conn, nil
 }
 
 func BlockRXStream(server string, token *[48]byte, ipRev *[4]byte, ep *EasyConnectEndpoint, debug bool) error {
