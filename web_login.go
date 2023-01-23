@@ -20,7 +20,7 @@ import (
 )
 
 func WebLogin(server string, username string, password string) string {
-	server = "https://" + server + ":443"
+	server = "https://" + server
 
 	c := &http.Client{
 		Transport: &http.Transport{
@@ -161,7 +161,7 @@ func WebLogin(server string, username string, password string) string {
 }
 
 func ECAgentToken(server string, twfId string) string {
-	dialConn, err := net.Dial("tcp", server+":443")
+	dialConn, err := net.Dial("tcp", server)
 	defer dialConn.Close()
 	conn := utls.UClient(dialConn, &utls.Config{InsecureSkipVerify: true}, utls.HelloGolang)
 	defer conn.Close()
