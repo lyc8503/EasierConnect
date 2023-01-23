@@ -78,7 +78,7 @@ func EasierConnectUI() {
 			form.SubmitText = "DisConnect"
 			form.Refresh()
 			Connected = true
-			//go Process(url.Text, port.Text, username.Text, passwd.Text, socks5.Text)
+			go Process(url.Text, port.Text, username.Text, passwd.Text, socks5.Text)
 		} else {
 			form.SubmitText = "Connect"
 			form.Refresh()
