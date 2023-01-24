@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"runtime"
 )
 
 func main() {
@@ -51,4 +52,6 @@ func main() {
 	log.Printf("Login success, your IP: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
 
 	client.ServeSocks5(socksBind, debugDump)
+
+	runtime.KeepAlive(client)
 }
