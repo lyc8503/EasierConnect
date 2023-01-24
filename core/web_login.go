@@ -121,7 +121,7 @@ func WebLogin(server string, username string, password string) (string, error) {
 		n, _ := resp.Body.Read(buf)
 		defer resp.Body.Close()
 
-		if !strings.Contains(string(buf[:n]), "验证码已发送到您的手机") {
+		if !strings.Contains(string(buf[:n]), "验证码已发送到您的手机") && !strings.Contains(string(buf[:n]), "<USER_PHONE>") {
 			debug.PrintStack()
 			return "", errors.New("unexpected sms resp: " + string(buf[:n]))
 		}
