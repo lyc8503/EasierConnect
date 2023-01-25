@@ -104,7 +104,7 @@ func WebLogin(server string, username string, password string) (string, error) {
 	// log.Printf("First stage login response: %s", string(buf[:n]))
 
 	// SMS Code Process
-	if strings.Contains(string(buf[:n]), "<NextService>auth/sms</NextService>") {
+	if strings.Contains(string(buf[:n]), "<NextService>auth/sms</NextService>") || strings.Contains(string(buf[:n]), "<NextAuth>2</NextAuth>") {
 		log.Print("SMS code required.")
 
 		addr = server + "/por/login_sms.csp?apiversion=1"
