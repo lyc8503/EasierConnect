@@ -168,7 +168,7 @@ func BlockTXStream(server string, token *[48]byte, ipRev *[4]byte, ep *EasyConne
 	errCh := make(chan error)
 
 	ep.OnRecv = func(buf []byte) {
-		n, err = conn.Write(buf)
+		var n, err = conn.Write(buf)
 		if err != nil {
 			errCh <- err
 			return
