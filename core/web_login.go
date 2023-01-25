@@ -50,7 +50,14 @@ func WebLogin(server string, username string, password string) (string, error) {
 	rsaKey := string(regexp.MustCompile(`<RSA_ENCRYPT_KEY>(.*)</RSA_ENCRYPT_KEY>`).FindSubmatch(buf[:n])[1])
 	log.Printf("RSA Key: %s", rsaKey)
 
-	rsaExp := string(regexp.MustCompile(`<RSA_ENCRYPT_EXP>(.*)</RSA_ENCRYPT_EXP>`).FindSubmatch(buf[:n])[1])
+	rsaExpMatch := regexp.MustCompile(`<RSA_ENCRYPT_EXP>(.*)</RSA_ENCRYPT_EXP>`).FindSubmatch(buf[:n])
+	rsaExp := ""
+	if rsaExpMatch != nil {
+		rsaExp = string(rsaExpMatch[1])
+	} else {
+		log.Printf("Warning: No RSA_ENCRYPT_EXP, using default.")
+		rsaExp = "65537"
+	}
 	log.Printf("RSA Exp: %s", rsaExp)
 
 	csrfMatch := regexp.MustCompile(`<CSRF_RAND_CODE>(.*)</CSRF_RAND_CODE>`).FindSubmatch(buf[:n])
