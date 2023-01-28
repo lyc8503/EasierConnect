@@ -212,7 +212,7 @@ func ECAgentToken(server string, twfId string) (string, error) {
 
 	log.Printf("Server Session ID: %q", conn.HandshakeState.ServerHello.SessionId)
 
-	buf := make([]byte, 40960)
+	buf := make([]byte, 140960)
 	n, err := conn.Read(buf)
 	if n == 0 || err != nil {
 		debug.PrintStack()
