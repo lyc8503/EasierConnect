@@ -20,7 +20,8 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-var ERR_NEXT_AUTH_SMS = errors.New("SMS Code required.")
+var ERR_NEXT_AUTH_SMS = errors.New("SMS Code required")
+var ERR_NEXT_AUTH_TOTP = errors.New("Current user's TOTP bound")
 
 func WebLogin(server string, username string, password string) (string, error) {
 	server = "https://" + server
@@ -138,6 +139,12 @@ func WebLogin(server string, username string, password string) (string, error) {
 		return twfId, ERR_NEXT_AUTH_SMS
 	}
 
+	// TOTP Authnication Process (Edited by JHong)
+	if strings.Contains(string(buf[:n]), "<NextService>auth/token</NextService>") || strings.Contains(string(buf[:n]), "<NextServiceSubType>totp</NextServiceSubType>") {
+		log.Print("TOTP Authnication required.")
+		return twfId, ERR_NEXT_AUTH_TOTP
+	}
+
 	if strings.Contains(string(buf[:n]), "<NextAuth>-1</NextAuth>") || !strings.Contains(string(buf[:n]), "<NextAuth>") {
 		log.Print("No NextAuth found.")
 	} else {
@@ -194,6 +201,44 @@ func AuthSms(server string, username string, password string, twfId string, smsC
 
 	twfId = string(regexp.MustCompile(`<TwfID>(.*)</TwfID>`).FindSubmatch(buf[:n])[1])
 	log.Print("SMS Code verification SUCCESS")
+
+	return twfId, nil
+}
+
+// JHong Implementing.......
+func TOTPAuth(server string, username string, password string, twfId string, TOTPCode string) (string, error) {
+	c := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}}
+
+	buf := make([]byte, 40960)
+
+	addr := "https://" + server + "/por/login_token.csp"
+	log.Printf("TOTP token Request: " + addr)
+	form := url.Values{
+		"svpn_inputtoken": {TOTPCode},
+	}
+
+	req, err := http.NewRequest("POST", addr, strings.NewReader(form.Encode()))
+	req.Header.Set("Cookie", "TWFID="+twfId)
+
+	resp, err := c.Do(req)
+	if err != nil {
+		debug.PrintStack()
+		return "", err
+	}
+
+	n, _ := resp.Body.Read(buf)
+	defer resp.Body.Close()
+
+	if !strings.Contains(string(buf[:n]), "suc") {
+		debug.PrintStack()
+		return "", errors.New("TOTP token verification FAILED: " + string(buf[:n]))
+	}
+
+	twfId = string(regexp.MustCompile(`<TwfID>(.*)</TwfID>`).FindSubmatch(buf[:n])[1])
+	log.Print("TOTP verification SUCCESS")
 
 	return twfId, nil
 }

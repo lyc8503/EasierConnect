@@ -11,7 +11,7 @@ import (
 func main() {
 	// CLI args
 	host, port, username, password, socksBind, twfId := "", 0, "", "", "", ""
-	flag.StringVar(&host, "server", "", "EasyConnect server address (e.g. vpn.nju.edu.cn)")
+	flag.StringVar(&host, "server", "", "EasyConnect server address (e.g. vpn.nju.edu.cn, sslvpn.sysu.edu.cn)")
 	flag.StringVar(&username, "username", "", "Your username")
 	flag.StringVar(&password, "password", "", "Your password")
 	flag.StringVar(&socksBind, "socks-bind", ":1080", "The addr socks5 server listens on (e.g. 0.0.0.0:1080)")
@@ -43,6 +43,12 @@ func main() {
 			fmt.Scan(&smsCode)
 
 			ip, err = client.AuthSMSCode(smsCode)
+		} else if err == core.ERR_NEXT_AUTH_TOTP {
+			fmt.Print(">>>Please enter your TOTP Auth code<<<:")
+			TOTPCode := ""
+			fmt.Scan(&TOTPCode)
+
+			ip, err = client.AuthTOTP(TOTPCode)
 		}
 	}
 
