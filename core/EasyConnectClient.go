@@ -56,6 +56,19 @@ func (client *EasyConnectClient) AuthSMSCode(code string) ([]byte, error) {
 	return client.LoginByTwfId(twfId)
 }
 
+func (client *EasyConnectClient) AuthTOTP(code string) ([]byte, error) {
+	if client.twfId == "" {
+		return nil, errors.New("TOTP Auth not required")
+	}
+
+	twfId, err := TOTPAuth(client.server, client.username, client.password, client.twfId, code)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.LoginByTwfId(twfId)
+}
+
 func (client *EasyConnectClient) LoginByTwfId(twfId string) ([]byte, error) {
 	agentToken, err := ECAgentToken(client.server, twfId)
 	if err != nil {
