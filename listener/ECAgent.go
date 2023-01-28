@@ -112,12 +112,14 @@ func HelloServer(w http.ResponseWriter, req *http.Request) {
 					fmt.Println(err)
 				}
 
-				ECAgentResult.twfid = string(DecryptedTwfid[:])
+				if ECAgentResult.twfid == "" {
+					ECAgentResult.twfid = string(DecryptedTwfid[:])
 
-				log.Printf("Encrypted twfid: %s \n", EncryptedTwfidHex)
-				log.Printf("Decrypted twfid: %s \n", ECAgentResult.twfid)
+					log.Printf("Encrypted twfid: %s \n", EncryptedTwfidHex)
+					log.Printf("Decrypted twfid: %s \n", ECAgentResult.twfid)
 
-				go startClient(ECAgentResult)
+					go startClient(ECAgentResult)
+				}
 
 				break
 			}
