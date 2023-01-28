@@ -20,8 +20,8 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-var ERR_NEXT_AUTH_SMS = errors.New("SMS Code required.")
-var ERR_NEXT_AUTH_TOTP = errors.New("Current usee's TOTP is binded.")
+var ERR_NEXT_AUTH_SMS = errors.New("SMS Code required")
+var ERR_NEXT_AUTH_TOTP = errors.New("Current user's TOTP bound")
 
 func WebLogin(server string, username string, password string) (string, error) {
 	server = "https://" + server
@@ -140,7 +140,7 @@ func WebLogin(server string, username string, password string) (string, error) {
 	}
 
 	// TOTP Authnication Process (Edited by JHong)
-	if strings.Contains(string(buf[:n]), "<NextService>auth/token</NextService>") || strings.Contains(string(buf[:n]), "<NextServiceSubType>totp</NextServiceSubType>") || strings.Contains(string(buf[:n]), "<NextAuth>2</NextAuth>") {
+	if strings.Contains(string(buf[:n]), "<NextService>auth/token</NextService>") || strings.Contains(string(buf[:n]), "<NextServiceSubType>totp</NextServiceSubType>") {
 		log.Print("TOTP Authnication required.")
 		return twfId, ERR_NEXT_AUTH_TOTP
 	}
