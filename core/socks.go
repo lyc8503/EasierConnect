@@ -54,7 +54,7 @@ func ServeSocks5(ipStack *stack.Stack, selfIp []byte, bindAddr string) {
 
 			log.Printf("Addr: %s, AllowedPorts: %v, useL3transport: %v, useCustomDns: %v, ResolvedIp: %s", addr, allowedPorts, useL3transport, hasDnsRule, ip)
 
-			if hasDnsRule || (useL3transport && port >= allowedPorts[0] && port <= allowedPorts[1]) {
+			if (!useL3transport && hasDnsRule) || (useL3transport && port >= allowedPorts[0] && port <= allowedPorts[1]) {
 				if network != "tcp" {
 					return nil, errors.New("only support tcp")
 				}

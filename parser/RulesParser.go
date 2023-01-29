@@ -142,7 +142,7 @@ func ParseResourceLists(host string, twfID string, debug bool) {
 		log.Printf("Progress: %v/100.00 (ResourceList.Rcs)", (float32(RcsIndex)/float32(RcsLen))*100)
 	}
 
-	log.Printf("Loaded ResourceList.Rcs")
+	log.Printf("Parsed %v Domain rules", config.GetDomainRuleLen())
 
 	for _, ent := range strings.Split(ResourceList.Dns.Data, ";") {
 		dnsEntry := strings.Split(ent, ":")
@@ -162,7 +162,6 @@ func ParseResourceLists(host string, twfID string, debug bool) {
 		}
 	}
 
-	log.Printf("Parsed %v Domain rules", config.GetDomainRuleLen())
 	log.Printf("Parsed %v Dns rules", config.GetDnsRuleLen())
 }
 
