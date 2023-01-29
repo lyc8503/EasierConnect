@@ -1,80 +1,99 @@
 package core
 
 import (
-    "context"
-    "errors"
-    "log"
-    "net"
-    "strconv"
-    "strings"
-    
-    "EasierConnect/core/config"
+	"context"
+	"errors"
+	"log"
+	"net"
+	"strconv"
+	"strings"
 
-    "gvisor.dev/gvisor/pkg/tcpip"
-    "gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
-    "gvisor.dev/gvisor/pkg/tcpip/header"
-    "gvisor.dev/gvisor/pkg/tcpip/stack"
-    "tailscale.com/net/socks5"
+	"EasierConnect/core/config"
+
+	"gvisor.dev/gvisor/pkg/tcpip"
+	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
+	"gvisor.dev/gvisor/pkg/tcpip/header"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
+	"tailscale.com/net/socks5"
 )
 
 func ServeSocks5(ipStack *stack.Stack, selfIp []byte, bindAddr string) {
-    server := socks5.Server{
-        Dialer: func(ctx context.Context, network, addr string) (net.Conn, error) {
+	server := socks5.Server{
+		Dialer: func(ctx context.Context, network, addr string) (net.Conn, error) {
 
-            log.Printf("socks dial: %s", addr)
+			log.Printf("socks dial: %s", addr)
 
-            if network != "tcp" {
-                return nil, errors.New("only support tcp")
-            }
+			parts := strings.Split(addr, ":")
 
-            parts := strings.Split(addr, ":")
+			ip := parts[0]
+			port, err := strconv.Atoi(parts[1])
+			if err != nil {
+				return nil, errors.New("invalid port: " + parts[1])
+			}
 
-            port, err := strconv.Atoi(parts[1])
-            if err != nil {
-                return nil, errors.New("invalid port: " + parts[1])
-            }
+			var allowedPorts []int // [0] -> Min, [1] -> Max
+			var useL3transport = true
+			var hasDnsRule = false
 
-            var ip string
-            dnsRules, ok := config.GetSingleDnsRule(parts[0])
-            if ok {
-                ip = dnsRules
-                log.Printf("using custom dns result: %s", ip)
+			if config.IsDomainRuleAvailable() {
+				allowedPorts, useL3transport = config.GetSingleDomainRule(ip)
+			}
 
-                target, err := net.ResolveIPAddr("ip", ip)
-                if err != nil {
-                    return nil, errors.New("resolve ip addr failed: " + parts[0])
-                }
+			if config.IsDnsRuleAvailable() {
+				var dnsRules string
+				dnsRules, hasDnsRule = config.GetSingleDnsRule(ip)
 
-                addrTarget := tcpip.FullAddress{
-                    NIC:  defaultNIC,
-                    Port: uint16(port),
-                    Addr: tcpip.Address(target.IP),
-                }
+				if hasDnsRule {
+					ip = dnsRules
+				}
+			}
 
-                bind := tcpip.FullAddress{
-                    NIC:  defaultNIC,
-                    Addr: tcpip.Address(selfIp),
-                }
+			if !useL3transport && config.IsDomainRuleAvailable() {
+				allowedPorts, useL3transport = config.GetSingleDomainRule(ip)
+			}
 
-                return gonet.DialTCPWithBind(context.Background(), ipStack, bind, addrTarget, header.IPv4ProtocolNumber)
-            } else {
-                goDialer := &net.Dialer{}
-                goDial := goDialer.DialContext
+			log.Printf("Addr: %s, AllowedPorts: %v, useL3transport: %v, useCustomDns: %v, ResolvedIp: %s", addr, allowedPorts, useL3transport, hasDnsRule, ip)
 
-                log.Printf("Skip: %s", addr)
+			if hasDnsRule || (useL3transport && port >= allowedPorts[0] && port <= allowedPorts[1]) {
+				if network != "tcp" {
+					return nil, errors.New("only support tcp")
+				}
 
-                return goDial(ctx, network, addr)
-            }
-        },
-    }
+				target, err := net.ResolveIPAddr("ip", ip)
+				if err != nil {
+					return nil, errors.New("resolve ip addr failed: " + ip)
+				}
 
-    listener, err := net.Listen("tcp", bindAddr)
-    if err != nil {
-        panic("socks listen failed: " + err.Error())
-    }
+				addrTarget := tcpip.FullAddress{
+					NIC:  defaultNIC,
+					Port: uint16(port),
+					Addr: tcpip.Address(target.IP),
+				}
 
-    log.Printf(">>>SOCKS5 SERVER listening on<<<: " + bindAddr)
+				bind := tcpip.FullAddress{
+					NIC:  defaultNIC,
+					Addr: tcpip.Address(selfIp),
+				}
 
-    err = server.Serve(listener)
-    panic(err)
+				return gonet.DialTCPWithBind(context.Background(), ipStack, bind, addrTarget, header.IPv4ProtocolNumber)
+
+			}
+			goDialer := &net.Dialer{}
+			goDial := goDialer.DialContext
+
+			log.Printf("skip: %s", addr)
+
+			return goDial(ctx, network, addr)
+		},
+	}
+
+	listener, err := net.Listen("tcp", bindAddr)
+	if err != nil {
+		panic("socks listen failed: " + err.Error())
+	}
+
+	log.Printf(">>>SOCKS5 SERVER listening on<<<: " + bindAddr)
+
+	err = server.Serve(listener)
+	panic(err)
 }
