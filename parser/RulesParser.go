@@ -4,6 +4,7 @@ import (
 	"EasierConnect/core/config"
 	"log"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -25,7 +26,7 @@ func getIPsInRange(from string, to string) *[]string {
 	ipf := StringArrToIntArr(strings.Split(from, "."))
 	ipt := StringArrToIntArr(strings.Split(to, "."))
 
-	ips := make([]string, 500, 6000)
+	var ips []string
 
 	equ := func(condition bool, yes int, no int) int {
 		if condition {
@@ -37,6 +38,7 @@ func getIPsInRange(from string, to string) *[]string {
 
 	var a, b, c int
 
+	//TODO::handle with a better method
 	for a = ipf[0]; a <= ipt[0]; a++ {
 		for b = equ(a == ipf[0], ipf[1], 0); b <= equ(a == ipt[0], ipt[1], 255); b++ {
 			for c = equ(b == ipf[1], ipf[2], 0); c <= equ(b == ipt[1], ipt[2], 255); c++ {
@@ -50,26 +52,32 @@ func getIPsInRange(from string, to string) *[]string {
 	return &ips
 }
 
-func processSingleIpRule(rule string, port string, debug bool) {
+func processSingleIpRule(rule string, port string, debug bool, waitChan chan int) {
 	appendRule := func(domain *string) {
+		minValue := port
+		maxValue := port
+
 		if strings.Contains(port, "~") {
-			minValue := strings.Split(port, "~")[0]
-			maxValue := strings.Split(port, "~")[1]
-
-			minValueInt, err := strconv.Atoi(minValue)
-			if err != nil {
-				log.Printf("Cannot parse port value from string")
-				return
-			}
-
-			maxValueInt, err := strconv.Atoi(maxValue)
-			if err != nil {
-				log.Printf("Cannot parse port value from string")
-				return
-			}
-
-			config.AppendSingleDomainRule(*domain, []int{minValueInt, maxValueInt}, debug)
+			minValue = strings.Split(port, "~")[0]
+			maxValue = strings.Split(port, "~")[1]
 		}
+
+		minValueInt, err := strconv.Atoi(minValue)
+		if err != nil {
+			log.Printf("Cannot parse port value from string")
+			return
+		}
+
+		maxValueInt, err := strconv.Atoi(maxValue)
+		if err != nil {
+			log.Printf("Cannot parse port value from string")
+			return
+		}
+
+		//	if debug {
+		log.Printf("Appending Domain rule for: %s%v", *domain, []int{minValueInt, maxValueInt})
+		//	}
+		config.AppendSingleDomainRule(*domain, []int{minValueInt, maxValueInt}, debug)
 	}
 
 	if strings.Contains(rule, "~") { // ip range 1.1.1.7~1.1.7.9
@@ -93,6 +101,8 @@ func processSingleIpRule(rule string, port string, debug bool) {
 
 		appendRule(&pureDomain) //TODO::FIXME:: remove this when using Http(s) proxy (i think it works on socks5)
 	}
+
+	waitChan <- 1
 }
 
 func ParseResourceLists(host string, twfID string, debug bool) {
@@ -101,10 +111,13 @@ func ParseResourceLists(host string, twfID string, debug bool) {
 
 	RcsLen := len(ResourceList.Rcs.Rc)
 
+	cpuNumber := runtime.NumCPU()
+	waitChan := make(chan int, cpuNumber)
+
 	for RcsIndex, ent := range ResourceList.Rcs.Rc {
-		if debug {
-			log.Printf("[%s] %s %s", ent.Name, ent.Host, ent.Port)
-		}
+		//	if debug {
+		log.Printf("[%s] %s %s", ent.Name, ent.Host, ent.Port)
+		//	}
 
 		if ent.Host == "" || ent.Port == "" {
 			break
@@ -117,11 +130,16 @@ func ParseResourceLists(host string, twfID string, debug bool) {
 			for index, domain := range domains {
 				portRange := ports[index]
 
-				processSingleIpRule(domain, portRange, debug)
+				if cpuNumber > 0 {
+					cpuNumber--
+				} else {
+					<-waitChan
+				}
+				processSingleIpRule(domain, portRange, debug, waitChan)
 			}
 		}
 
-		log.Printf("Progress: %v/100 (ResourceList.Rcs)", (float32(RcsIndex)/float32(RcsLen))*100)
+		log.Printf("Progress: %v/100.00 (ResourceList.Rcs)", (float32(RcsIndex)/float32(RcsLen))*100)
 	}
 
 	log.Printf("Loaded ResourceList.Rcs")
@@ -134,9 +152,9 @@ func ParseResourceLists(host string, twfID string, debug bool) {
 			domain := dnsEntry[1]
 			ip := dnsEntry[2]
 
-			if debug {
-				log.Printf("[%s] %s %s", RcID, domain, ip)
-			}
+			//	if debug {
+			log.Printf("[%s] %s %s", RcID, domain, ip)
+			//	}
 
 			if domain != "" && ip != "" {
 				config.AppendSingleDnsRule(domain, ip, debug)

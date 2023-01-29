@@ -14,6 +14,7 @@ import (
 // local socks5 binding
 var SocksBind string
 var DebugDump bool
+var ParseServConfig bool
 
 type EasyConnectClient struct {
 	queryConn net.Conn
@@ -131,8 +132,10 @@ func (client *EasyConnectClient) LoginByTwfId(twfId string) ([]byte, error) {
 	}
 
 	// Parse Server config
-	parser.ParseResourceLists(client.server, twfId, DebugDump)
-	parser.ParseConfLists(client.server, twfId, DebugDump)
+	if ParseServConfig {
+		parser.ParseResourceLists(client.server, twfId, DebugDump)
+		parser.ParseConfLists(client.server, twfId, DebugDump)
+	}
 
 	client.token = (*[48]byte)([]byte(agentToken + twfId))
 

@@ -31,7 +31,7 @@ func ServeSocks5(ipStack *stack.Stack, selfIp []byte, bindAddr string) {
 				return nil, errors.New("invalid port: " + parts[1])
 			}
 
-			var allowedPorts []int // [0] -> Min, [1] -> Max
+			var allowedPorts = []int{1, 65535} // [0] -> Min, [1] -> Max
 			var useL3transport = true
 			var hasDnsRule = false
 
@@ -76,7 +76,6 @@ func ServeSocks5(ipStack *stack.Stack, selfIp []byte, bindAddr string) {
 				}
 
 				return gonet.DialTCPWithBind(context.Background(), ipStack, bind, addrTarget, header.IPv4ProtocolNumber)
-
 			}
 			goDialer := &net.Dialer{}
 			goDial := goDialer.DialContext
