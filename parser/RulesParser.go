@@ -11,9 +11,9 @@ func ParseResourceLists(host string, twfID string, debug bool) {
 	parseXml(&ResourceList, host, config.PathRlist, twfID)
 
 	//for _, ent := range ResourceList.Rcs.Rc {
-	//	if debug {
-	//		log.Printf("[%s] %s %s", ent.Name, ent.Host, ent.Port)
-	//	}
+	//    if debug {
+	//        log.Printf("[%s] %s %s", ent.Name, ent.Host, ent.Port)
+	//    }
 	//}
 
 	for _, ent := range strings.Split(ResourceList.Dns.Data, ";") {

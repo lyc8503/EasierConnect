@@ -29,7 +29,7 @@ func parseXml(in any, host string, path string, twfid string) string {
 	buf, err := io.ReadAll(resp.Body)
 	defer resp.Body.Close()
 
-	//	log.Printf("%s \n", string(buf[:]))
+	//    log.Printf("%s \n", string(buf[:]))
 
 	err = xml.Unmarshal(buf[:], &in)
 	if err != nil {
