@@ -1,11 +1,19 @@
 package core
 
 import (
+	"EasierConnect/parser"
 	"errors"
+	"fmt"
+	"log"
 	"net"
+	"runtime"
 
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
+
+// local socks5 binding
+var SocksBind string
+var DebugDump bool
 
 type EasyConnectClient struct {
 	queryConn net.Conn
@@ -25,6 +33,53 @@ func NewEasyConnectClient(server string) *EasyConnectClient {
 	return &EasyConnectClient{
 		server: server,
 	}
+}
+
+func StartClient(host string, port int, username string, password string, twfId string) {
+	server := fmt.Sprintf("%s:%d", host, port)
+
+	client := NewEasyConnectClient(server)
+
+	var ip []byte
+	var err error
+	if twfId != "" {
+		if len(twfId) != 16 {
+			panic("len(twfid) should be 16!")
+		}
+		ip, err = client.LoginByTwfId(twfId)
+	} else {
+		ip, err = client.Login(username, password)
+		if err == ERR_NEXT_AUTH_SMS {
+			fmt.Print(">>>Please enter your sms code<<<:")
+			smsCode := ""
+			_, err := fmt.Scan(&smsCode)
+			if err != nil {
+				panic(err)
+				return
+			}
+
+			ip, err = client.AuthSMSCode(smsCode)
+		} else if err == ERR_NEXT_AUTH_TOTP {
+			fmt.Print(">>>Please enter your TOTP Auth code<<<:")
+			TOTPCode := ""
+			_, err := fmt.Scan(&TOTPCode)
+			if err != nil {
+				panic(err)
+				return
+			}
+
+			ip, err = client.AuthTOTP(TOTPCode)
+		}
+	}
+
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	log.Printf("Login success, your IP: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
+
+	client.ServeSocks5(SocksBind, DebugDump)
+
+	runtime.KeepAlive(client)
 }
 
 func (client *EasyConnectClient) Login(username string, password string) ([]byte, error) {
@@ -74,6 +129,10 @@ func (client *EasyConnectClient) LoginByTwfId(twfId string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Parse Server config
+	parser.ParseResourceLists(client.server, twfId, DebugDump)
+	parser.ParseConfLists(client.server, twfId, DebugDump)
 
 	client.token = (*[48]byte)([]byte(agentToken + twfId))
 

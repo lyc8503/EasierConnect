@@ -6,6 +6,7 @@ require github.com/refraction-networking/utls v1.2.0
 
 require (
 	fyne.io/fyne/v2 v2.3.0
+	github.com/cornelk/hashmap v1.0.8
 	gvisor.dev/gvisor v0.0.0-20220901235040-6ca97ef2ce1c
 	tailscale.com v1.34.2
 )

@@ -2,10 +2,19 @@ package listener
 
 import (
 	"EasierConnect/core"
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
+	"math/big"
+	"net"
+	"os"
+	"os/exec"
 	REGEXP "regexp"
+	"runtime"
 	"strconv"
+	"time"
 
 	"encoding/hex"
 
@@ -30,6 +39,7 @@ type ECAgentResult_ struct {
 
 var Env Env_
 var ECAgentResult ECAgentResult_
+var ECAgentPort int
 
 /** This is a quick implementation of ECAgent listener protocol
  */
@@ -37,6 +47,14 @@ var ECAgentResult ECAgentResult_
 func HelloServer(w http.ResponseWriter, req *http.Request) {
 	reqMap := make(map[string]string)
 	log.Printf("Simple ECAgent #> ClientRequest: %s \n", req.RequestURI)
+
+	if req.RequestURI == "/ECAgent/" {
+		_, err := w.Write([]byte("Init ECAgent env successfully. You can login to vpn now."))
+		if err != nil {
+			panic(err)
+		}
+		return
+	}
 
 	constructRespon := func(operate string, result string, message string, debug string) string {
 		return "(\"{\\\"type\\\":\\\"" + operate + "\\\",\\\"result\\\":\\\"" + result + "\\\",\\\"message\\\":\\\"" + message + "\\\",\\\"debug\\\":\\\"" + debug + "\\\"}\");"
@@ -138,6 +156,10 @@ func HelloServer(w http.ResponseWriter, req *http.Request) {
 		//arg1 == 1 -> /por/conf.csp
 		//arg1 == 2 -> rlist.csp
 
+		//return the json format config
+
+		//We will stick here on WebPage, but we could log in any way. (unless we finish the json here)
+
 		if reqMap["arg1"] == "1" {
 
 			response.WriteString("(\"" + "\");")
@@ -185,17 +207,17 @@ func HelloServer(w http.ResponseWriter, req *http.Request) {
 func startClient(config ECAgentResult_) {
 	port, err := strconv.Atoi(config.port)
 	if err != nil {
-		log.Fatal("Cannot parse port!\n")
+		log.Fatal("Cannot parse port!")
 	}
 
 	log.Printf("Starting Client ..... \n")
 
-	core.StartClient(config.server, port, "", "", config.twfID, core.DebugDump)
+	core.StartClient(config.server, port, "", "", config.twfID)
 }
 
 /*
 *
-generate Pkcs1 keys
+generate Pkcs1 keys (to decrypt the twfID from javascript's request)
 */
 func generateKey() {
 	var err error
@@ -205,7 +227,7 @@ func generateKey() {
 		log.Fatal("Failed generating private key")
 	}
 
-	Env.privateKey.Precompute()
+	go Env.privateKey.Precompute()
 	// validate private key
 	err = Env.privateKey.Validate()
 	if err != nil {
@@ -225,30 +247,136 @@ func initRegExp() {
 	}
 }
 
-func StartECAgent(debugMode bool) {
+/*
+*
+Create the cert which server uses
+*/
+func generateServerCert() (string, string) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	x509temple := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		NotBefore:    time.UnixMilli(0),
+		NotAfter:     time.Now().Add(time.Hour * 24 * 365),
+
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+
+		IsCA:        true,
+		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	cert, err := x509.CreateCertificate(rand.Reader, &x509temple, &x509temple, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		panic(err)
+	}
+
+	buffer := &bytes.Buffer{}
+	err = pem.Encode(buffer, &pem.Block{Type: "CERTIFICATE", Bytes: cert})
+	if err != nil {
+		panic(err)
+	}
+	certStr := buffer.String()
+	buffer.Reset()
+
+	certPrivKey := x509.MarshalPKCS1PrivateKey(privateKey)
+
+	err = pem.Encode(buffer, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: certPrivKey})
+	if err != nil {
+		panic(err)
+	}
+	key := buffer.String()
+
+	return certStr, key
+}
+
+func createTempFile(fileNamePattern string, data string) *os.File {
+	f, err := os.CreateTemp("", fileNamePattern)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(f)
+
+	_, err = f.Write([]byte(data))
+	if err != nil {
+		panic(err)
+	}
+
+	return f
+}
+
+func checkPort() {
+	ECAgentPort = 54530
+	Ports := []int{54530, 54541, 54552, 54563, 54574, 54585, 54596, 54607}
+	/* available ports: 54530, 54541, 54552, 54563, 54574, 54585, 54596, 54607
+	 */
+
+	log.Printf("Checking available port...")
+
+	for index, port := range Ports {
+		ln, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
+		ln.Close()
+
+		if err == nil {
+			ECAgentPort = port
+			break
+		}
+
+		if index == 7 {
+			log.Fatal("Cannot find available port!")
+		}
+	}
+}
+
+func StartECAgent() {
 	Env = Env_{}
 	ECAgentResult = ECAgentResult_{}
 
+	checkPort()
 	initRegExp()
 	generateKey()
 
-	/*
-	      54530,
-	   	  54541,
-	   	  54552,
-	   	  54563,
-	   	  54574,
-	   	  54585,
-	   	  54596,
-	   	  54607
-	*/
+	cert, key := generateServerCert()
+	certFile := createTempFile("ECAgent-*.crt", cert)
+	keyFile := createTempFile("ECAgent-*.key", key)
 
-	core.DebugDump = debugMode
+	go func() {
+		<-time.After(500 * time.Millisecond)
+		url := fmt.Sprintf("https://127.0.0.1:%v/ECAgent/", ECAgentPort)
 
-	//TODO:: Handle port in use error & https://go.dev/src/crypto/tls/generate_cert.go Auto cert generate
+		switch runtime.GOOS {
+		case "windows":
+			err := exec.Command("cmd", "/c", "start", url).Run()
+			if err != nil {
+				panic(err)
+			}
+		case "darwin":
+			err := exec.Command("open", url).Run()
+			if err != nil {
+				panic(err)
+			}
+		default:
+			err := exec.Command("xdg-open", url).Run()
+			if err != nil {
+				panic(err)
+			}
+		}
+	}()
+
+	log.Printf(fmt.Sprintf("ECAgent is Listening on %v. (EXPERIMENT)\n", ECAgentPort))
+
+	//TODO:: Handle port in use error
 	http.HandleFunc("/ECAgent/", HelloServer)
-	err := http.ListenAndServeTLS(":54530", "server.crt", "server.key", nil)
-	if err != nil {
+	if err := http.ListenAndServeTLS(fmt.Sprintf(":%v", ECAgentPort), certFile.Name(), keyFile.Name(), nil); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }
