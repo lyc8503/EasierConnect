@@ -6,8 +6,10 @@ require github.com/refraction-networking/utls v1.2.0
 
 require (
 	fyne.io/fyne/v2 v2.3.0
-	gvisor.dev/gvisor v0.0.0-20220901235040-6ca97ef2ce1c
-	tailscale.com v1.34.2
+	github.com/cornelk/hashmap v1.0.8
+	github.com/dlclark/regexp2 v1.8.0
+	gvisor.dev/gvisor v0.0.0-20230128000341-b7014294633b
+	tailscale.com v1.36.0
 )
 
 require (
@@ -35,13 +37,15 @@ require (
 	github.com/stretchr/testify v1.8.0 // indirect
 	github.com/tevino/abool v1.2.0 // indirect
 	github.com/yuin/goldmark v1.4.1 // indirect
-	golang.org/x/crypto v0.1.0 // indirect
+	go4.org/mem v0.0.0-20210711025021-927187094b94 // indirect
+	golang.org/x/crypto v0.3.0 // indirect
+	golang.org/x/exp v0.0.0-20221205204356-47842c84f3db // indirect
 	golang.org/x/image v0.0.0-20220601225756-64ec528b34cd // indirect
 	golang.org/x/mobile v0.0.0-20211207041440-4e6c2922fdee // indirect
-	golang.org/x/net v0.1.0 // indirect
-	golang.org/x/sys v0.3.1-0.20221220025402-2204b6615fb8 // indirect
-	golang.org/x/text v0.4.0 // indirect
-	golang.org/x/time v0.0.0-20211116232009-f0f3c7e86c11 // indirect
+	golang.org/x/net v0.5.0 // indirect
+	golang.org/x/sys v0.4.0 // indirect
+	golang.org/x/text v0.6.0 // indirect
+	golang.org/x/time v0.0.0-20220609170525-579cf78fd858 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/js/dom v0.0.0-20210725211120-f030747120f2 // indirect
 )
