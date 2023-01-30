@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"math"
 	"net"
 	"strconv"
 	"strings"
@@ -82,6 +83,19 @@ func ServeSocks5(ipStack *stack.Stack, selfIp []byte, bindAddr string) {
 
 						useL3transport = true
 						allowedPorts = rule.Ports
+					}
+				}
+			}
+
+			if config.IsDomainRuleAvailable() {
+				allowAllWebSitesPorts, allowAllWebSites := config.GetSingleDomainRule("*")
+
+				if allowAllWebSites {
+					if allowAllWebSitesPorts[0] > 0 && allowAllWebSitesPorts[1] > 0 {
+						allowedPorts[0] = int(math.Min(float64(allowedPorts[0]), float64(allowAllWebSitesPorts[0])))
+						allowedPorts[1] = int(math.Max(float64(allowedPorts[1]), float64(allowAllWebSitesPorts[1])))
+
+						useL3transport = true
 					}
 				}
 			}

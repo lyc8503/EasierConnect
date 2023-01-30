@@ -115,10 +115,11 @@ func processSingleIpRule(rule, port string, debug bool, waitChan *chan int) {
 			log.Printf("Handling rule for: %s-%s mask: %v", from, to, mask)
 		}
 
-		log.Printf(" %s-%s mask: %v %v", from, to, mask, k)
-
 		// prefer HashMap for better performance.
 		if mask != 0 && mask <= 28 {
+			if debug {
+				log.Printf("using Cidr %s-%s mask: %v %v", from, to, mask, k)
+			}
 
 			cidr := fmt.Sprintf("%s/%v", from, mask)
 
@@ -246,6 +247,7 @@ func ParseResourceLists(host, twfID string, debug bool) {
 			processRcsData(ResourceList, debug, &waitChan, &cpuNumber)
 
 			log.Printf("Parsed %v Domain rules", config.GetDomainRuleLen())
+			log.Printf("Parsed %v Cidr rules", config.GetCIDRRuleLen())
 
 			DnsDataRegexp := regexp2.MustCompile("(?<=<Dns dnsserver=\"\" data=\")[0-9A-Za-z:;.-]*?(?=\")", 0)
 			DnsDataRegexpMatches, _ := DnsDataRegexp.FindStringMatch(resUrlDecodedValue)
@@ -259,6 +261,7 @@ func ParseResourceLists(host, twfID string, debug bool) {
 		processRcsData(ResourceList, debug, &waitChan, &cpuNumber)
 
 		log.Printf("Parsed %v Domain rules", config.GetDomainRuleLen())
+		log.Printf("Parsed %v Cidr rules", config.GetCIDRRuleLen())
 
 		processDnsData(ResourceList.Dns.Data, debug)
 
