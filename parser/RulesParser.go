@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/dlclark/regexp2"
 	"log"
+	"math"
 	"net"
 	"net/url"
 	"regexp"
@@ -29,9 +30,12 @@ func getMaskByIpRange(fromIp string, toIp string) (ones int, bits int) {
 	fromIpSplit := StringArrToIntArr(strings.Split(fromIp, "."))
 	toIpSplit := StringArrToIntArr(strings.Split(toIp, "."))
 
+	fromIpSplit[3] = int(math.Max(float64(fromIpSplit[3]-1), 0))
+	toIpSplit[3] = int(math.Min(float64(toIpSplit[3]+1), 255))
+
 	var mask [4]byte
-	for i := len(fromIpSplit) - 1; i >= 0; i-- {
-		mask[i] = byte(255 - toIpSplit[i] + fromIpSplit[i])
+	for i := 3; i >= 0; i-- {
+		mask[i] = uint8(255 - toIpSplit[i] + fromIpSplit[i])
 	}
 
 	return net.IPv4Mask(mask[0], mask[1], mask[2], mask[3]).Size()
@@ -42,7 +46,7 @@ func getIPsInRange(from, to string) *[]string {
 	ipf := StringArrToIntArr(strings.Split(from, "."))
 	ipt := StringArrToIntArr(strings.Split(to, "."))
 
-	var ips []string
+	ips := make([]string, 4096)
 
 	equ := func(condition bool, yes int, no int) int {
 		if condition {
@@ -105,15 +109,16 @@ func processSingleIpRule(rule, port string, debug bool, waitChan *chan int) {
 		from := strings.Split(rule, "~")[0]
 		to := strings.Split(rule, "~")[1]
 
-		mask, _ := getMaskByIpRange(from, to)
+		mask, k := getMaskByIpRange(from, to)
 
 		if debug {
 			log.Printf("Handling rule for: %s-%s mask: %v", from, to, mask)
 		}
 
+		log.Printf(" %s-%s mask: %v %v", from, to, mask, k)
+
 		// prefer HashMap for better performance.
 		if mask != 0 && mask <= 28 {
-			log.Printf("Large sub-net detected: %s-%s mask: %v", from, to, mask)
 
 			cidr := fmt.Sprintf("%s/%v", from, mask)
 
