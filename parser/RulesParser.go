@@ -84,7 +84,7 @@ func countByIpRange(from string, to string) int {
 }
 
 func processSingleIpRule(rule, port string, debug bool, waitChan *chan int) {
-	appendRule := func(value *string, isCIDR bool) {
+	appendRule := func(value *string, isIPV4RangeRule bool, isCIDR bool) {
 		minValue := port
 		maxValue := port
 
@@ -106,11 +106,11 @@ func processSingleIpRule(rule, port string, debug bool, waitChan *chan int) {
 		}
 
 		if debug {
-			log.Printf("Appending Domain rule for: %s%v isCIDR: %v", *value, []int{minValueInt, maxValueInt}, isCIDR)
+			log.Printf("Appending Domain rule for: %s%v isIpv4RangeRule: %v isCIDR: %v", *value, []int{minValueInt, maxValueInt}, isIPV4RangeRule, isCIDR)
 		}
 
-		if isCIDR {
-			config.AppendSingleCIDRRule(*value, []int{minValueInt, maxValueInt}, debug)
+		if isIPV4RangeRule {
+			config.AppendSingleIpv4RangeRule(*value, []int{minValueInt, maxValueInt}, isCIDR, debug)
 		} else {
 			config.AppendSingleDomainRule(*value, []int{minValueInt, maxValueInt}, debug)
 		}
@@ -127,19 +127,7 @@ func processSingleIpRule(rule, port string, debug bool, waitChan *chan int) {
 			log.Printf("Handling rule for: %s-%s mask: %v", from, to, mask)
 		}
 
-		if size > 65535 {
-			log.Printf("Large rule detected for: %s-%s mask: %v", from, to, mask)
-
-			if size > 131072 {
-				// TODO:: handle large range using TreeNode
-
-				// bits.LeadingZeros32
-				log.Printf("skip rule: %s-%s mask: %v", from, to, mask)
-				return
-			}
-		}
-
-		// prefer HashMap for better performance.
+		// mask == 0 -> cannot cover to cidr
 		if mask != 0 && mask <= 28 {
 			if debug {
 				log.Printf("using Cidr %s-%s mask: %v %v", from, to, mask, k)
@@ -147,14 +135,24 @@ func processSingleIpRule(rule, port string, debug bool, waitChan *chan int) {
 
 			cidr := fmt.Sprintf("%s/%v", from, mask)
 
-			appendRule(&cidr, true)
+			appendRule(&cidr, true, true)
 		} else {
-			for _, domain := range *getIPsInRange(from, to) {
-				appendRule(&domain, false)
+			if size > 4096 {
+				log.Printf("Super large rule detected for: %s-%s mask: %v", from, to, mask)
+
+				appendRule(&rule, true, false)
+			} else {
+				if size > 1024 {
+					log.Printf("Large rule detected for: %s-%s mask: %v", from, to, mask)
+				}
+
+				for _, domain := range *getIPsInRange(from, to) {
+					appendRule(&domain, false, false)
+				}
 			}
 		}
 	} else { // http://domain.example.com/path/to&something=good#extra
-		appendRule(&rule, false)
+		appendRule(&rule, false, false)
 
 		if domainRegExp == nil {
 			domainRegExp, _ = regexp.Compile("(?:\\w+\\.)+\\w+")
@@ -162,7 +160,7 @@ func processSingleIpRule(rule, port string, debug bool, waitChan *chan int) {
 
 		pureDomain := domainRegExp.FindString(rule)
 
-		appendRule(&pureDomain, false) //TODO::FIXME:: remove this when using Http(s) proxy
+		appendRule(&pureDomain, false, false) //TODO::FIXME:: remove this when using Http(s) proxy
 	}
 
 	*waitChan <- 1
@@ -271,7 +269,7 @@ func ParseResourceLists(host, twfID string, debug bool) {
 			processRcsData(ResourceList, debug, &waitChan, &cpuNumber)
 
 			log.Printf("Parsed %v Domain rules", config.GetDomainRuleLen())
-			log.Printf("Parsed %v Cidr rules", config.GetCIDRRuleLen())
+			log.Printf("Parsed %v Ipv4 rules", config.GetIpv4RuleLen())
 
 			DnsDataRegexp := regexp2.MustCompile("(?<=<Dns dnsserver=\"\" data=\")[0-9A-Za-z:;.-]*?(?=\")", 0)
 			DnsDataRegexpMatches, _ := DnsDataRegexp.FindStringMatch(resUrlDecodedValue)
@@ -285,7 +283,7 @@ func ParseResourceLists(host, twfID string, debug bool) {
 		processRcsData(ResourceList, debug, &waitChan, &cpuNumber)
 
 		log.Printf("Parsed %v Domain rules", config.GetDomainRuleLen())
-		log.Printf("Parsed %v Cidr rules", config.GetCIDRRuleLen())
+		log.Printf("Parsed %v Ipv4 rules", config.GetIpv4RuleLen())
 
 		processDnsData(ResourceList.Dns.Data, debug)
 

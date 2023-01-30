@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log"
@@ -61,28 +62,41 @@ func ServeSocks5(ipStack *stack.Stack, selfIp []byte, bindAddr string) {
 				allowedPorts, useL3transport = config.GetSingleDomainRule(target.IP.String())
 			}
 
-			if !useL3transport && config.IsCIDRRuleAvailable() {
-
+			if !useL3transport && config.IsIpv4RuleAvailable() {
 				if DebugDump {
-					log.Printf("Cidr is available ")
+					log.Printf("Ipv4Rule is available ")
 				}
-
-				for _, rule := range *config.GetCIDRRules() {
-
-					_, cidr, _ := net.ParseCIDR(rule.Cidr)
-
-					if DebugDump {
-						log.Printf("Cidr test: %s %s %v", target.IP, rule.Cidr, cidr.Contains(target.IP))
-					}
-
-					if cidr.Contains(target.IP) {
-
+				for _, rule := range *config.GetIpv4Rules() {
+					if rule.CIDR {
+						_, cidr, _ := net.ParseCIDR(rule.Rule)
 						if DebugDump {
-							log.Printf("Cidr matched: %s %s", target.IP, rule.Cidr)
+							log.Printf("Cidr test: %s %s %v", target.IP, rule.Rule, cidr.Contains(target.IP))
 						}
 
-						useL3transport = true
-						allowedPorts = rule.Ports
+						if cidr.Contains(target.IP) {
+							if DebugDump {
+								log.Printf("Cidr matched: %s %s", target.IP, rule.Rule)
+							}
+
+							useL3transport = true
+							allowedPorts = rule.Ports
+						}
+					} else {
+						if DebugDump {
+							log.Printf("raw match test: %s %s", target.IP, rule.Rule)
+						}
+
+						ip1 := net.ParseIP(strings.Split(rule.Rule, "~")[0])
+						ip2 := net.ParseIP(strings.Split(rule.Rule, "~")[1])
+
+						if bytes.Compare(target.IP, ip1) >= 0 && bytes.Compare(target.IP, ip2) <= 0 {
+							if DebugDump {
+								log.Printf("raw matched: %s %s", ip1, ip2)
+							}
+
+							useL3transport = true
+							allowedPorts = rule.Ports
+						}
 					}
 				}
 			}
