@@ -212,11 +212,11 @@ func StartProtocol(endpoint *EasyConnectEndpoint, server string, token *[48]byte
 		for counter < 5 {
 			err := BlockRXStream(server, token, ipRev, endpoint, debug)
 			if err != nil {
-				log.Print("Error occurred while recv, retrying: " + err.Error())
+				log.Print("Error occurred while receiving, retrying: " + err.Error())
 			}
 			counter += 1
 		}
-		panic("recv retry limit exceeded.")
+		panic("receive retry limit exceeded.")
 	}
 
 	go RX()

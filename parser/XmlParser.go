@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/xml"
 	"io"
@@ -8,7 +9,7 @@ import (
 	"net/http"
 )
 
-func parseXml(in any, host string, path string, twfid string) string {
+func parseXml(in any, host string, path string, twfid string) (string, bool) {
 	c := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -23,24 +24,29 @@ func parseXml(in any, host string, path string, twfid string) string {
 	if err != nil {
 		log.Print(err)
 		log.Printf("Cannot request %s \n", path)
-		return ""
+		return "", false
 	}
 
-	buf, err := io.ReadAll(resp.Body)
-	defer resp.Body.Close()
+	var buf bytes.Buffer
+	io.Copy(&buf, resp.Body)
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+		}
+	}(resp.Body)
 
 	//    log.Printf("%s \n", string(buf[:]))
 
-	err = xml.Unmarshal(buf[:], &in)
+	err = xml.Unmarshal(buf.Bytes(), &in)
 	if err != nil {
 		log.Print(err)
 		log.Printf("Cannot parse %s \n", path)
 
-		return ""
+		return buf.String(), false
 	} else {
 		log.Printf("Parsed %s \n", path)
 
-		return string(buf[:])
+		return buf.String(), true
 	}
 
 }

@@ -35,6 +35,8 @@ func ServeSocks5(ipStack *stack.Stack, selfIp []byte, bindAddr string) {
 			var useL3transport = true
 			var hasDnsRule = false
 
+			var target *net.IPAddr
+
 			if config.IsDomainRuleAvailable() {
 				allowedPorts, useL3transport = config.GetSingleDomainRule(ip)
 			}
@@ -48,8 +50,40 @@ func ServeSocks5(ipStack *stack.Stack, selfIp []byte, bindAddr string) {
 				}
 			}
 
+			target, err = net.ResolveIPAddr("ip", ip)
+			if err != nil {
+				return nil, errors.New("resolve ip addr failed: " + ip)
+			}
+
 			if !useL3transport && config.IsDomainRuleAvailable() {
-				allowedPorts, useL3transport = config.GetSingleDomainRule(ip)
+				log.Printf("final ip: %s", target.IP.String())
+				allowedPorts, useL3transport = config.GetSingleDomainRule(target.IP.String())
+			}
+
+			if !useL3transport && config.IsCIDRRuleAvailable() {
+
+				if DebugDump {
+					log.Printf("Cidr is available ")
+				}
+
+				for _, rule := range *config.GetCIDRRules() {
+
+					_, cidr, _ := net.ParseCIDR(rule.Cidr)
+
+					if DebugDump {
+						log.Printf("Cidr test: %s %s %v", target.IP, rule.Cidr, cidr.Contains(target.IP))
+					}
+
+					if cidr.Contains(target.IP) {
+
+						if DebugDump {
+							log.Printf("Cidr matched: %s %s", target.IP, rule.Cidr)
+						}
+
+						useL3transport = true
+						allowedPorts = rule.Ports
+					}
+				}
 			}
 
 			log.Printf("Addr: %s, AllowedPorts: %v, useL3transport: %v, useCustomDns: %v, ResolvedIp: %s", addr, allowedPorts, useL3transport, hasDnsRule, ip)
@@ -57,11 +91,6 @@ func ServeSocks5(ipStack *stack.Stack, selfIp []byte, bindAddr string) {
 			if (!useL3transport && hasDnsRule) || (useL3transport && port >= allowedPorts[0] && port <= allowedPorts[1]) {
 				if network != "tcp" {
 					return nil, errors.New("only support tcp")
-				}
-
-				target, err := net.ResolveIPAddr("ip", ip)
-				if err != nil {
-					return nil, errors.New("resolve ip addr failed: " + ip)
 				}
 
 				addrTarget := tcpip.FullAddress{

@@ -2,7 +2,11 @@ package parser
 
 import (
 	"EasierConnect/core/config"
+	"fmt"
+	"github.com/dlclark/regexp2"
 	"log"
+	"net"
+	"net/url"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -21,8 +25,20 @@ func StringArrToIntArr(strArr []string) [4]int {
 	return intArr
 }
 
+func getMaskByIpRange(fromIp string, toIp string) (ones int, bits int) {
+	fromIpSplit := StringArrToIntArr(strings.Split(fromIp, "."))
+	toIpSplit := StringArrToIntArr(strings.Split(toIp, "."))
+
+	var mask [4]byte
+	for i := len(fromIpSplit) - 1; i >= 0; i-- {
+		mask[i] = byte(255 - toIpSplit[i] + fromIpSplit[i])
+	}
+
+	return net.IPv4Mask(mask[0], mask[1], mask[2], mask[3]).Size()
+}
+
 // from https://github.com/dromara/hutool/blob/fc091b01a23271e02f3174c45942105048155c90/hutool-core/src/main/java/cn/hutool/core/net/Ipv4Util.java#L114
-func getIPsInRange(from string, to string) *[]string {
+func getIPsInRange(from, to string) *[]string {
 	ipf := StringArrToIntArr(strings.Split(from, "."))
 	ipt := StringArrToIntArr(strings.Split(to, "."))
 
@@ -38,7 +54,7 @@ func getIPsInRange(from string, to string) *[]string {
 
 	var a, b, c int
 
-	//TODO::handle with a better method
+	//TODO::use mask instead
 	for a = ipf[0]; a <= ipt[0]; a++ {
 		for b = equ(a == ipf[0], ipf[1], 0); b <= equ(a == ipt[0], ipt[1], 255); b++ {
 			for c = equ(b == ipf[1], ipf[2], 0); c <= equ(b == ipt[1], ipt[2], 255); c++ {
@@ -52,8 +68,8 @@ func getIPsInRange(from string, to string) *[]string {
 	return &ips
 }
 
-func processSingleIpRule(rule string, port string, debug bool, waitChan chan int) {
-	appendRule := func(domain *string) {
+func processSingleIpRule(rule, port string, debug bool, waitChan *chan int) {
+	appendRule := func(value *string, isCIDR bool) {
 		minValue := port
 		maxValue := port
 
@@ -74,24 +90,41 @@ func processSingleIpRule(rule string, port string, debug bool, waitChan chan int
 			return
 		}
 
-		//	if debug {
-		log.Printf("Appending Domain rule for: %s%v", *domain, []int{minValueInt, maxValueInt})
-		//	}
-		config.AppendSingleDomainRule(*domain, []int{minValueInt, maxValueInt}, debug)
+		if debug {
+			log.Printf("Appending Domain rule for: %s%v isCIDR: %v", *value, []int{minValueInt, maxValueInt}, isCIDR)
+		}
+
+		if isCIDR {
+			config.AppendSingleCIDRRule(*value, []int{minValueInt, maxValueInt}, debug)
+		} else {
+			config.AppendSingleDomainRule(*value, []int{minValueInt, maxValueInt}, debug)
+		}
 	}
 
 	if strings.Contains(rule, "~") { // ip range 1.1.1.7~1.1.7.9
 		from := strings.Split(rule, "~")[0]
 		to := strings.Split(rule, "~")[1]
 
+		mask, _ := getMaskByIpRange(from, to)
+
 		if debug {
-			log.Printf("Handling rule for: %s-%s", from, to)
+			log.Printf("Handling rule for: %s-%s mask: %v", from, to, mask)
 		}
-		for _, domain := range *getIPsInRange(from, to) {
-			appendRule(&domain)
+
+		// prefer HashMap for better performance.
+		if mask != 0 && mask <= 28 {
+			log.Printf("Large sub-net detected: %s-%s mask: %v", from, to, mask)
+
+			cidr := fmt.Sprintf("%s/%v", from, mask)
+
+			appendRule(&cidr, true)
+		} else {
+			for _, domain := range *getIPsInRange(from, to) {
+				appendRule(&domain, false)
+			}
 		}
 	} else { // http://domain.example.com/path/to&something=good#extra
-		appendRule(&rule)
+		appendRule(&rule, false)
 
 		if domainRegExp == nil {
 			domainRegExp, _ = regexp.Compile("(?:\\w+\\.)+\\w+")
@@ -99,28 +132,42 @@ func processSingleIpRule(rule string, port string, debug bool, waitChan chan int
 
 		pureDomain := domainRegExp.FindString(rule)
 
-		appendRule(&pureDomain) //TODO::FIXME:: remove this when using Http(s) proxy (i think it works on socks5)
+		appendRule(&pureDomain, false) //TODO::FIXME:: remove this when using Http(s) proxy (i think it works on socks5)
 	}
 
-	waitChan <- 1
+	*waitChan <- 1
 }
 
-func ParseResourceLists(host string, twfID string, debug bool) {
-	ResourceList := config.Resource{}
-	parseXml(&ResourceList, host, config.PathRlist, twfID)
+func processDnsData(dnsData string, debug bool) {
+	for _, ent := range strings.Split(dnsData, ";") {
+		dnsEntry := strings.Split(ent, ":")
 
-	RcsLen := len(ResourceList.Rcs.Rc)
+		if len(dnsEntry) >= 3 {
+			RcID := dnsEntry[0]
+			domain := dnsEntry[1]
+			ip := dnsEntry[2]
 
-	cpuNumber := runtime.NumCPU()
-	waitChan := make(chan int, cpuNumber)
+			if debug {
+				log.Printf("[%s] %s %s", RcID, domain, ip)
+			}
 
-	for RcsIndex, ent := range ResourceList.Rcs.Rc {
-		//	if debug {
-		log.Printf("[%s] %s %s", ent.Name, ent.Host, ent.Port)
-		//	}
+			if domain != "" && ip != "" {
+				config.AppendSingleDnsRule(domain, ip, debug)
+			}
+		}
+	}
+}
+
+func processRcsData(rcsData config.Resource, debug bool, waitChan *chan int, cpuNumber *int) {
+	RcsLen := len(rcsData.Rcs.Rc)
+	for RcsIndex, ent := range rcsData.Rcs.Rc {
+		if debug {
+			log.Printf("[%s] %s %s", ent.Name, ent.Host, ent.Port)
+		}
 
 		if ent.Host == "" || ent.Port == "" {
-			break
+			log.Printf("Found null entry when processing RcsData: [%s] %s %s", ent.Name, ent.Host, ent.Port)
+			continue
 		}
 
 		domains := strings.Split(ent.Host, ";")
@@ -130,42 +177,91 @@ func ParseResourceLists(host string, twfID string, debug bool) {
 			for index, domain := range domains {
 				portRange := ports[index]
 
-				if cpuNumber > 0 {
-					cpuNumber--
+				if *cpuNumber > 0 {
+					*cpuNumber--
 				} else {
-					<-waitChan
+					<-*waitChan
 				}
 				processSingleIpRule(domain, portRange, debug, waitChan)
 			}
 		}
 
-		log.Printf("Progress: %v/100.00 (ResourceList.Rcs)", (float32(RcsIndex)/float32(RcsLen))*100)
+		log.Printf("Progress: %v/100 (ResourceList.Rcs)", int(float32(RcsIndex)/float32(RcsLen)*100))
 	}
-
-	log.Printf("Parsed %v Domain rules", config.GetDomainRuleLen())
-
-	for _, ent := range strings.Split(ResourceList.Dns.Data, ";") {
-		dnsEntry := strings.Split(ent, ":")
-
-		if len(dnsEntry) >= 3 {
-			RcID := dnsEntry[0]
-			domain := dnsEntry[1]
-			ip := dnsEntry[2]
-
-			//	if debug {
-			log.Printf("[%s] %s %s", RcID, domain, ip)
-			//	}
-
-			if domain != "" && ip != "" {
-				config.AppendSingleDnsRule(domain, ip, debug)
-			}
-		}
-	}
-
-	log.Printf("Parsed %v Dns rules", config.GetDnsRuleLen())
 }
 
-func ParseConfLists(host string, twfID string, debug bool) {
+func ParseResourceLists(host, twfID string, debug bool) {
+	ResourceList := config.Resource{}
+	res, ok := parseXml(&ResourceList, host, config.PathRlist, twfID)
+
+	cpuNumber := runtime.NumCPU()
+	waitChan := make(chan int, cpuNumber)
+
+	if !ok || ResourceList.Rcs.Rc == nil || len(ResourceList.Rcs.Rc) <= 0 || ResourceList.Dns.Data == "" {
+		if res != "" {
+			log.Printf("try parsing by regexp")
+
+			escapeReplacementMap := map[string]string{
+				"&nbsp;": string(160),
+				"&amp;":  "&",
+				"&quot;": "\"",
+				"&lt;":   "<",
+				"&gt;":   ">",
+			}
+
+			for from, to := range escapeReplacementMap {
+				res = strings.ReplaceAll(res, from, to)
+			}
+
+			resUrlDecodedValue, err := url.QueryUnescape(res)
+			if err != nil {
+				log.Printf("Cannot do UrlDecode")
+				return
+			}
+
+			ResourceList.Rcs.Rc = []config.RcData{}
+
+			ResourceListRegexp := regexp2.MustCompile("(?<=\" host=\").*?(?=\" enable_disguise=)", 0)
+			ResourceListMatches, _ := ResourceListRegexp.FindStringMatch(resUrlDecodedValue)
+			for ; ResourceListMatches != nil; ResourceListMatches, _ = ResourceListRegexp.FindNextMatch(ResourceListMatches) {
+
+				if debug {
+					log.Printf("ResourceListMatch -> " + ResourceListMatches.String() + "\n")
+				}
+
+				ResourceListData := ResourceListMatches.String()
+
+				ResourceListDataHost := strings.Split(ResourceListData, "\" port=\"")[0]
+				ResourceListDataPort := strings.Split(ResourceListData, "\" port=\"")[1]
+
+				entry := config.RcData{Host: ResourceListDataHost, Port: ResourceListDataPort}
+				ResourceList.Rcs.Rc = append(ResourceList.Rcs.Rc, entry)
+			}
+
+			processRcsData(ResourceList, debug, &waitChan, &cpuNumber)
+
+			log.Printf("Parsed %v Domain rules", config.GetDomainRuleLen())
+
+			DnsDataRegexp := regexp2.MustCompile("(?<=<Dns dnsserver=\"\" data=\")[0-9A-Za-z:;.-]*?(?=\")", 0)
+			DnsDataRegexpMatches, _ := DnsDataRegexp.FindStringMatch(resUrlDecodedValue)
+
+			processDnsData(DnsDataRegexpMatches.String(), debug)
+
+			log.Printf("Parsed %v Dns rules", config.GetDnsRuleLen())
+		}
+	} else {
+
+		processRcsData(ResourceList, debug, &waitChan, &cpuNumber)
+
+		log.Printf("Parsed %v Domain rules", config.GetDomainRuleLen())
+
+		processDnsData(ResourceList.Dns.Data, debug)
+
+		log.Printf("Parsed %v Dns rules", config.GetDnsRuleLen())
+	}
+}
+
+func ParseConfLists(host, twfID string, debug bool) {
 	conf := config.Conf{}
-	_ = parseXml(&conf, host, config.PathConf, twfID)
+	_, _ = parseXml(&conf, host, config.PathConf, twfID)
 }

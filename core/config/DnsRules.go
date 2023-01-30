@@ -5,10 +5,10 @@ import (
 	"log"
 )
 
-//domain[ip]
+// domain[ip]
 var dnsRules *hashmap.Map[string, string]
 
-func AppendSingleDnsRule(domain string, ip string, debug bool) {
+func AppendSingleDnsRule(domain, ip string, debug bool) {
 	if dnsRules == nil {
 		dnsRules = hashmap.New[string, string]()
 	}

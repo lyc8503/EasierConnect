@@ -49,11 +49,11 @@ func (ep *EasyConnectEndpoint) ARPHardwareType() header.ARPHardwareType {
 	return header.ARPHardwareNone
 }
 
-func (ep *EasyConnectEndpoint) AddHeader(buffer *stack.PacketBuffer) {}
+func (ep *EasyConnectEndpoint) AddHeader(stack.PacketBufferPtr) {}
 
 func (ep *EasyConnectEndpoint) WritePackets(list stack.PacketBufferList) (int, tcpip.Error) {
 	for _, packetBuffer := range list.AsSlice() {
-		buf := []byte{}
+		var buf []byte
 		for _, t := range packetBuffer.AsSlices() {
 			buf = append(buf, t...)
 		}

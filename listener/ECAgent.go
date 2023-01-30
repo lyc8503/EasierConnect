@@ -56,7 +56,7 @@ func HelloServer(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	constructRespon := func(operate string, result string, message string, debug string) string {
+	constructRespon := func(operate, result, message, debug string) string {
 		return "(\"{\\\"type\\\":\\\"" + operate + "\\\",\\\"result\\\":\\\"" + result + "\\\",\\\"message\\\":\\\"" + message + "\\\",\\\"debug\\\":\\\"" + debug + "\\\"}\");"
 	}
 
@@ -294,7 +294,7 @@ func generateServerCert() (string, string) {
 }
 
 // TODO:: Move to utils\FileUtils.go
-func createTempFile(fileNamePattern string, data string) *os.File {
+func createTempFile(fileNamePattern, data string) *os.File {
 	f, err := os.CreateTemp("", fileNamePattern)
 	if err != nil {
 		log.Fatal(err)

@@ -2,30 +2,32 @@ package config
 
 import "encoding/xml"
 
+type RcData struct {
+	Text           string `xml:",chardata"`
+	ID             string `xml:"id,attr"`
+	Name           string `xml:"name,attr"`
+	Type           string `xml:"type,attr"`
+	Proto          string `xml:"proto,attr"`
+	Svc            string `xml:"svc,attr"`
+	Host           string `xml:"host,attr"`
+	Port           string `xml:"port,attr"`
+	EnableDisguise string `xml:"enable_disguise,attr"`
+	Note           string `xml:"note,attr"`
+	Attr           string `xml:"attr,attr"`
+	AppPath        string `xml:"app_path,attr"`
+	RcGrpID        string `xml:"rc_grp_id,attr"`
+	RcLogo         string `xml:"rc_logo,attr"`
+	Authorization  string `xml:"authorization,attr"`
+	AuthSpID       string `xml:"auth_sp_id,attr"`
+	Selectid       string `xml:"selectid,attr"`
+}
+
 type Resource struct {
 	XMLName xml.Name `xml:"Resource"`
 	Text    string   `xml:",chardata"`
 	Rcs     struct {
-		Text string `xml:",chardata"`
-		Rc   []struct {
-			Text           string `xml:",chardata"`
-			ID             string `xml:"id,attr"`
-			Name           string `xml:"name,attr"`
-			Type           string `xml:"type,attr"`
-			Proto          string `xml:"proto,attr"`
-			Svc            string `xml:"svc,attr"`
-			Host           string `xml:"host,attr"`
-			Port           string `xml:"port,attr"`
-			EnableDisguise string `xml:"enable_disguise,attr"`
-			Note           string `xml:"note,attr"`
-			Attr           string `xml:"attr,attr"`
-			AppPath        string `xml:"app_path,attr"`
-			RcGrpID        string `xml:"rc_grp_id,attr"`
-			RcLogo         string `xml:"rc_logo,attr"`
-			Authorization  string `xml:"authorization,attr"`
-			AuthSpID       string `xml:"auth_sp_id,attr"`
-			Selectid       string `xml:"selectid,attr"`
-		} `xml:"Rc"`
+		Text string   `xml:",chardata"`
+		Rc   []RcData `xml:"Rc"`
 	} `xml:"Rcs"`
 	RcGroups struct {
 		Text  string `xml:",chardata"`
