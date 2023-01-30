@@ -2,10 +2,13 @@ package listener
 
 import (
 	"EasierConnect/core"
+	"EasierConnect/core/config"
+	"EasierConnect/parser"
 	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"math/big"
 	"net"
@@ -150,22 +153,75 @@ func HelloServer(w http.ResponseWriter, req *http.Request) {
 		response.WriteString(constructRespon(action, "-1", "", ""))
 		break
 	case action == "GetConfig":
-		//TODO:: finish Config parser
 		//op=GetConfig&arg1=1&token=&Guid=&callback=EA_cbxxxxx
 
-		//arg1 == 1 -> /por/conf.csp
-		//arg1 == 2 -> rlist.csp
-
-		//return the json format config
-
-		//We will stick here on WebPage, but we could log in any way. (unless we finish the json here)
-
 		if reqMap["arg1"] == "1" {
+			conf := config.Conf{}
+			_, ok := parser.ParseXml(&conf, ECAgentResult.server, config.PathConf, ECAgentResult.twfID)
 
-			response.WriteString("(\"" + "\");")
+			confWeb := config.ConfWeb{Conf: conf}
+
+			if ok {
+				result, err := json.Marshal(confWeb)
+				if err != nil {
+					fmt.Println("Cannot convert Json.", err)
+					return
+				}
+
+				replacementMap := map[string]string{}
+
+				sh1t := strings.ReplaceAll(strings.ReplaceAll(string(result), "\\", "\\\\"), "\"", "\\\"")
+
+				for from, to := range replacementMap {
+					sh1t = strings.ReplaceAll(sh1t, from, to)
+				}
+
+				response.WriteString("(\"" + sh1t + "\");")
+			} else {
+				response.WriteString("(\"" + "\");")
+			}
 		} else if reqMap["arg1"] == "2" {
+			res := config.Resource{}
+			_, ok := parser.ParseXml(&res, ECAgentResult.server, config.PathRlist, ECAgentResult.twfID)
 
-			response.WriteString("(\"" + "\");")
+			ResourceList := config.ResourceWeb{Resource: res}
+
+			if ok {
+				result, err := json.Marshal(ResourceList)
+				if err != nil {
+					fmt.Println("Cannot convert Json.", err)
+					return
+				}
+
+				replacementMap := map[string]string{
+					"ID":             "id",
+					"Name":           "name",
+					"Type":           "type",
+					"Proto":          "proto",
+					"Svc":            "svc",
+					"Host":           "host",
+					"Port":           "port",
+					"EnableDisguise": "enable_disguise",
+					"Note":           "note",
+					"Attr":           "attr",
+					"AppPath":        "app_path",
+					"RcGrpID":        "rc_grp_id",
+					"RcLogo":         "rc_logo",
+					"Authorization":  "authorization",
+					"AuthSpID":       "auth_sp_id",
+					"Selectid":       "selectid",
+				}
+
+				sh1t := strings.ReplaceAll(strings.ReplaceAll(string(result), "\\", "\\\\"), "\"", "\\\"")
+
+				for from, to := range replacementMap {
+					sh1t = strings.ReplaceAll(sh1t, from, to)
+				}
+
+				response.WriteString("(\"" + sh1t + "\");")
+			} else {
+				response.WriteString("(\"" + "\");")
+			}
 		}
 		break
 	case action == "CheckReLogin":

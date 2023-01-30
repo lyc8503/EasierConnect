@@ -220,7 +220,7 @@ func processRcsData(rcsData config.Resource, debug bool, waitChan *chan int, cpu
 
 func ParseResourceLists(host, twfID string, debug bool) {
 	ResourceList := config.Resource{}
-	res, ok := parseXml(&ResourceList, host, config.PathRlist, twfID)
+	res, ok := ParseXml(&ResourceList, host, config.PathRlist, twfID)
 
 	cpuNumber := runtime.NumCPU()
 	waitChan := make(chan int, cpuNumber)
@@ -246,8 +246,6 @@ func ParseResourceLists(host, twfID string, debug bool) {
 				log.Printf("Cannot do UrlDecode")
 				return
 			}
-
-			ResourceList.Rcs.Rc = []config.RcData{}
 
 			ResourceListRegexp := regexp2.MustCompile("(?<=\" host=\").*?(?=\" enable_disguise=)", 0)
 			ResourceListMatches, _ := ResourceListRegexp.FindStringMatch(resUrlDecodedValue)
@@ -279,6 +277,7 @@ func ParseResourceLists(host, twfID string, debug bool) {
 			log.Printf("Parsed %v Dns rules", config.GetDnsRuleLen())
 		}
 	} else {
+		log.Printf("try parsing by goXml")
 
 		processRcsData(ResourceList, debug, &waitChan, &cpuNumber)
 
@@ -293,5 +292,5 @@ func ParseResourceLists(host, twfID string, debug bool) {
 
 func ParseConfLists(host, twfID string, debug bool) {
 	conf := config.Conf{}
-	_, _ = parseXml(&conf, host, config.PathConf, twfID)
+	_, _ = ParseXml(&conf, host, config.PathConf, twfID)
 }

@@ -9,7 +9,7 @@ import (
 	"net/http"
 )
 
-func parseXml(in any, host string, path string, twfid string) (string, bool) {
+func ParseXml(in any, host string, path string, twfid string) (string, bool) {
 	c := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},

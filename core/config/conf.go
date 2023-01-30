@@ -1,16 +1,17 @@
 package config
 
-import (
-	"encoding/xml"
-)
+type ConfWeb struct {
+	Conf      Conf
+	LocalConf struct {
+		Session struct {
+			NameFix string `xml:"nameFix,attr" json:"nameFix"`
+		} `xml:"Session,attr" json:"Session"`
+	} `xml:"LocalConf,attr" json:"LocalConf"`
+}
 
 type Conf struct {
-	XMLName xml.Name `xml:"Conf"`
-	Text    string   `xml:",chardata"`
-	EMM     struct {
-		Text             string `xml:",chardata"`
+	EMM struct {
 		NetworkWhiteList struct {
-			Text           string `xml:",chardata"`
 			ForbidIntranet string `xml:"forbid_intranet,attr"`
 			ForbidInternet string `xml:"forbid_internet,attr"`
 		} `xml:"NetworkWhiteList"`
@@ -22,7 +23,6 @@ type Conf struct {
 	} `xml:"EMM"`
 	AworkName   string `xml:"AworkName"`
 	WebSecLogin struct {
-		Text              string `xml:",chardata"`
 		LastLoginRes      string `xml:"LastLoginRes"`
 		LastLoginTime     string `xml:"LastLoginTime"`
 		LastLoginType     string `xml:"LastLoginType"`
@@ -33,19 +33,16 @@ type Conf struct {
 		LastLoginSwitch   string `xml:"LastLoginSwitch"`
 	} `xml:"WebSecLogin"`
 	SysTray struct {
-		Text            string `xml:",chardata"`
 		Enable          string `xml:"enable,attr"`
 		SSLTrayIconMd5  string `xml:"SSLTrayIconMd5,attr"`
 		SysShortCutName string `xml:"SysShortCutName,attr"`
 		SSLTrayIconPath string `xml:"SSLTrayIconPath,attr"`
 	} `xml:"SysTray"`
 	Webagent struct {
-		Text    string `xml:",chardata"`
 		Enable  string `xml:"enable,attr"`
 		Address string `xml:"address,attr"`
 	} `xml:"Webagent"`
 	Mline struct {
-		Text     string `xml:",chardata"`
 		Enable   string `xml:"enable,attr"`
 		Number   string `xml:"number,attr"`
 		List     string `xml:"list,attr"`
@@ -53,11 +50,9 @@ type Conf struct {
 		Timeout  string `xml:"timeout,attr"`
 	} `xml:"Mline"`
 	Vpnline struct {
-		Text    string `xml:",chardata"`
 		Address string `xml:"address,attr"`
 	} `xml:"Vpnline"`
 	Htp struct {
-		Text   string `xml:",chardata"`
 		Enable string `xml:"enable,attr"`
 		Auto   string `xml:"auto,attr"`
 		Param  string `xml:"param,attr"`
@@ -65,7 +60,6 @@ type Conf struct {
 		Mtu    string `xml:"mtu,attr"`
 	} `xml:"Htp"`
 	WebCache struct {
-		Text   string `xml:",chardata"`
 		Enable string `xml:"enable,attr"`
 		Mode   string `xml:"mode,attr"`
 		Count  string `xml:"count,attr"`
@@ -73,24 +67,20 @@ type Conf struct {
 	} `xml:"WebCache"`
 	WebOpt    string `xml:"WebOpt"`
 	Bandwidth struct {
-		Text      string `xml:",chardata"`
 		Recvlimit string `xml:"recvlimit,attr"`
 		Sendlimit string `xml:"sendlimit,attr"`
 	} `xml:"Bandwidth"`
 	TcpApplication struct {
-		Text       string `xml:",chardata"`
 		UserMode   string `xml:"userMode,attr"`
 		Compress   string `xml:"compress,attr"`
 		Maxthread  string `xml:"maxthread,attr"`
 		Maxsession string `xml:"maxsession,attr"`
 	} `xml:"TcpApplication"`
 	L3VPN struct {
-		Text        string `xml:",chardata"`
 		IptunDns    string `xml:"iptunDns,attr"`
 		IptunDnsBak string `xml:"iptunDnsBak,attr"`
 	} `xml:"L3VPN"`
 	SCache struct {
-		Text   string `xml:",chardata"`
 		Enable string `xml:"enable,attr"`
 		Gwid   string `xml:"gwid,attr"`
 		ID     string `xml:"id,attr"`
@@ -102,14 +92,12 @@ type Conf struct {
 		Exception []string `xml:"Exception"`
 	} `xml:"DnsRuleExceptions"`
 	UsbKey struct {
-		Text      string `xml:",chardata"`
 		Version   string `xml:"version,attr"`
 		Certinput string `xml:"certinput,attr"`
 		Typeinfo  string `xml:"typeinfo,attr"`
 		Typecount string `xml:"typecount,attr"`
 	} `xml:"UsbKey"`
 	CDC struct {
-		Text        string `xml:",chardata"`
 		Enable      string `xml:"enable,attr"`
 		LogKey      string `xml:"LogKey,attr"`
 		UseUsersLog string `xml:"useUsersLog,attr"`
@@ -118,7 +106,6 @@ type Conf struct {
 		AuthPast    string `xml:"AuthPast,attr"`
 	} `xml:"CDC"`
 	Autorule struct {
-		Text            string `xml:",chardata"`
 		Enable          string `xml:"enable,attr"`
 		EnableLimit     string `xml:"enable_limit,attr"`
 		GatherRuleLimit string `xml:"gather_rule_limit,attr"`
@@ -128,7 +115,6 @@ type Conf struct {
 		Domain          string `xml:"domain,attr"`
 	} `xml:"Autorule"`
 	Other struct {
-		Text                string `xml:",chardata"`
 		LoginName           string `xml:"login_name,attr"`
 		SddnEnable          string `xml:"sddn_enable,attr"`
 		Sslctx              string `xml:"sslctx,attr"`
@@ -165,7 +151,6 @@ type Conf struct {
 		AccessibleAddr      string `xml:"AccessibleAddr,attr"`
 	} `xml:"Other"`
 	RemoteApp struct {
-		Text              string `xml:",chardata"`
 		AccountPolicy     string `xml:"account_policy,attr"`
 		SessionKeeptime   string `xml:"session_keeptime,attr"`
 		MapDisk           string `xml:"MapDisk,attr"`
@@ -178,29 +163,23 @@ type Conf struct {
 		PrintPaper        string `xml:"PrintPaper"`
 		PrivateFolderName string `xml:"PrivateFolderName"`
 		SRAPOption        struct {
-			Text           string `xml:",chardata"`
 			LossCompressor struct {
-				Text    string `xml:",chardata"`
 				Type    string `xml:"type,attr"`
 				Ratio   string `xml:"ratio,attr"`
 				Quality string `xml:"quality,attr"`
 			} `xml:"LossCompressor"`
 			GlyphCompress struct {
-				Text        string `xml:",chardata"`
 				Option      string `xml:"option,attr"`
 				JpegQuality string `xml:"jpeg_quality,attr"`
 			} `xml:"GlyphCompress"`
 			NoLossCompressor struct {
-				Text           string `xml:",chardata"`
 				BmpCompressor  string `xml:"bmp_compressor,attr"`
 				CompressorType string `xml:"compressor_type,attr"`
 			} `xml:"NoLossCompressor"`
 			CacheHash struct {
-				Text   string `xml:",chardata"`
 				OpType string `xml:"op_type,attr"`
 			} `xml:"CacheHash"`
 			StreamMerge struct {
-				Text      string `xml:",chardata"`
 				Type      string `xml:"type,attr"`
 				Threshold string `xml:"threshold,attr"`
 				Uptime    string `xml:"uptime,attr"`
@@ -208,24 +187,20 @@ type Conf struct {
 		} `xml:"SRAPOption"`
 	} `xml:"RemoteApp"`
 	SSLCipherSuite struct {
-		Text  string `xml:",chardata"`
 		EC    string `xml:"EC"`
 		TCP   string `xml:"TCP"`
 		L3VPN string `xml:"L3VPN"`
 	} `xml:"SSLCipherSuite"`
 	SSLEigenvalue struct {
-		Text  string `xml:",chardata"`
 		TCP   string `xml:"TCP"`
 		L3VPN string `xml:"L3VPN"`
 	} `xml:"SSLEigenvalue"`
 	Logo struct {
-		Text     string `xml:",chardata"`
 		Custom   string `xml:"custom,attr"`
 		LogoMd5  string `xml:"LogoMd5,attr"`
 		LogoPath string `xml:"LogoPath,attr"`
 	} `xml:"Logo"`
 	WebHttpEnable struct {
-		Text     string `xml:",chardata"`
 		HttpPort string `xml:"httpPort,attr"`
 		Enable   string `xml:"enable,attr"`
 	} `xml:"WebHttpEnable"`
