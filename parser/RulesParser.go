@@ -58,7 +58,6 @@ func getIPsInRange(from, to string) *[]string {
 
 	var a, b, c int
 
-	//TODO::use mask instead
 	for a = ipf[0]; a <= ipt[0]; a++ {
 		for b = equ(a == ipf[0], ipf[1], 0); b <= equ(a == ipt[0], ipt[1], 255); b++ {
 			for c = equ(b == ipf[1], ipf[2], 0); c <= equ(b == ipt[1], ipt[2], 255); c++ {
@@ -70,6 +69,18 @@ func getIPsInRange(from, to string) *[]string {
 	}
 
 	return &ips
+}
+
+func countByIpRange(from string, to string) int {
+	count := 1
+	ipf := StringArrToIntArr(strings.Split(from, "."))
+	ipt := StringArrToIntArr(strings.Split(to, "."))
+
+	for i := 3; i >= 0; i-- {
+		count += (ipt[i] - ipf[i]) * int(math.Pow(256, float64(3-i)))
+	}
+
+	return count
 }
 
 func processSingleIpRule(rule, port string, debug bool, waitChan *chan int) {
@@ -108,11 +119,24 @@ func processSingleIpRule(rule, port string, debug bool, waitChan *chan int) {
 	if strings.Contains(rule, "~") { // ip range 1.1.1.7~1.1.7.9
 		from := strings.Split(rule, "~")[0]
 		to := strings.Split(rule, "~")[1]
+		size := countByIpRange(from, to)
 
 		mask, k := getMaskByIpRange(from, to)
 
 		if debug {
 			log.Printf("Handling rule for: %s-%s mask: %v", from, to, mask)
+		}
+
+		if size > 65535 {
+			log.Printf("Large rule detected for: %s-%s mask: %v", from, to, mask)
+
+			if size > 131072 {
+				// TODO:: handle large range using TreeNode
+
+				// bits.LeadingZeros32
+				log.Printf("skip rule: %s-%s mask: %v", from, to, mask)
+				return
+			}
 		}
 
 		// prefer HashMap for better performance.
@@ -138,7 +162,7 @@ func processSingleIpRule(rule, port string, debug bool, waitChan *chan int) {
 
 		pureDomain := domainRegExp.FindString(rule)
 
-		appendRule(&pureDomain, false) //TODO::FIXME:: remove this when using Http(s) proxy (i think it works on socks5)
+		appendRule(&pureDomain, false) //TODO::FIXME:: remove this when using Http(s) proxy
 	}
 
 	*waitChan <- 1
@@ -208,7 +232,7 @@ func ParseResourceLists(host, twfID string, debug bool) {
 			log.Printf("try parsing by regexp")
 
 			escapeReplacementMap := map[string]string{
-				"&nbsp;": string(160),
+				"&nbsp;": string(rune(160)),
 				"&amp;":  "&",
 				"&quot;": "\"",
 				"&lt;":   "<",

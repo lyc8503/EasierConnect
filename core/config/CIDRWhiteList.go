@@ -6,7 +6,6 @@ import (
 
 var Ipv4RangeRules *[]Ipv4Range
 
-// Ipv4Range TODO:: use BinarySearchMap for better performance (but do we really have so many rules ?)
 type Ipv4Range struct {
 	Cidr  string
 	Ports []int
