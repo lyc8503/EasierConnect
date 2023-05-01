@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -12,25 +11,6 @@ import (
 
 	tls "github.com/refraction-networking/utls"
 )
-
-type FakeHeartBeatExtension struct {
-	*tls.GenericExtension
-}
-
-func (e *FakeHeartBeatExtension) Len() int {
-	return 5
-}
-
-func (e *FakeHeartBeatExtension) Read(b []byte) (n int, err error) {
-	if len(b) < e.Len() {
-		return 0, io.ErrShortBuffer
-	}
-	b[1] = 0x0f
-	b[3] = 1
-	b[4] = 1
-
-	return e.Len(), io.EOF
-}
 
 func DumpHex(buf []byte) {
 	stdoutDumper := hex.Dumper(os.Stdout)
@@ -56,11 +36,8 @@ func TLSConn(server string) (*tls.UConn, error) {
 	conn.SetTLSVers(tls.VersionTLS11, tls.VersionTLS11, []tls.TLSExtension{})
 	conn.HandshakeState.Hello.Vers = tls.VersionTLS11
 	conn.HandshakeState.Hello.CipherSuites = []uint16{tls.TLS_RSA_WITH_RC4_128_SHA, tls.FAKE_TLS_EMPTY_RENEGOTIATION_INFO_SCSV}
-	conn.HandshakeState.Hello.CompressionMethods = []uint8{1, 0}
+	conn.HandshakeState.Hello.CompressionMethods = []uint8{0}
 	conn.HandshakeState.Hello.SessionId = []byte{'L', '3', 'I', 'P', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-	conn.Extensions = []tls.TLSExtension{
-		&FakeHeartBeatExtension{},
-	}
 
 	log.Println("tls: connected to: ", conn.RemoteAddr())
 
@@ -212,11 +189,11 @@ func StartProtocol(endpoint *EasyConnectEndpoint, server string, token *[48]byte
 		for counter < 5 {
 			err := BlockRXStream(server, token, ipRev, endpoint, debug)
 			if err != nil {
-				log.Print("Error occurred while receiving, retrying: " + err.Error())
+				log.Print("Error occurred while recv, retrying: " + err.Error())
 			}
 			counter += 1
 		}
-		panic("receive retry limit exceeded.")
+		panic("recv retry limit exceeded.")
 	}
 
 	go RX()
