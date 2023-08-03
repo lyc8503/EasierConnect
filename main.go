@@ -6,14 +6,18 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"time"
+
+	"github.com/pquerna/otp/totp"
 )
 
 func main() {
 	// CLI args
-	host, port, username, password, socksBind, twfId := "", 0, "", "", "", ""
+	host, port, username, password, socksBind, twfId, totpKey := "", 0, "", "", "", "", ""
 	flag.StringVar(&host, "server", "", "EasyConnect server address (e.g. vpn.nju.edu.cn, sslvpn.sysu.edu.cn)")
 	flag.StringVar(&username, "username", "", "Your username")
 	flag.StringVar(&password, "password", "", "Your password")
+	flag.StringVar(&totpKey, "totp-key", "", "If provided, this program will automatically generate TOTP code using this key and and input it, instead of asking user.")
 	flag.StringVar(&socksBind, "socks-bind", ":1080", "The addr socks5 server listens on (e.g. 0.0.0.0:1080)")
 	flag.StringVar(&twfId, "twf-id", "", "Login using twfID captured (mostly for debug usage)")
 	flag.IntVar(&port, "port", 443, "EasyConnect port address (e.g. 443)")
@@ -44,9 +48,18 @@ func main() {
 
 			ip, err = client.AuthSMSCode(smsCode)
 		} else if err == core.ERR_NEXT_AUTH_TOTP {
-			fmt.Print(">>>Please enter your TOTP Auth code<<<:")
 			TOTPCode := ""
-			fmt.Scan(&TOTPCode)
+
+			if totpKey == "" {
+				fmt.Print(">>>Please enter your TOTP Auth code<<<:")
+				fmt.Scan(&TOTPCode)
+			} else {
+				TOTPCode, err := totp.GenerateCode(totpKey, time.Now())
+				if err != nil {
+					panic(err)
+				}
+				log.Printf("Generated TOTP code %s", TOTPCode)
+			}
 
 			ip, err = client.AuthTOTP(TOTPCode)
 		}
