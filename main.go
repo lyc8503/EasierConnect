@@ -54,7 +54,7 @@ func main() {
 				fmt.Print(">>>Please enter your TOTP Auth code<<<:")
 				fmt.Scan(&TOTPCode)
 			} else {
-				TOTPCode, err := totp.GenerateCode(totpKey, time.Now())
+				TOTPCode, err = totp.GenerateCode(totpKey, time.Now())
 				if err != nil {
 					panic(err)
 				}
