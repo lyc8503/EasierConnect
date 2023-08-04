@@ -4,6 +4,8 @@ go 1.19
 
 require github.com/refraction-networking/utls v1.2.0
 
+require github.com/pquerna/otp v1.4.0
+
 require (
 	fyne.io/fyne/v2 v2.3.0
 	gvisor.dev/gvisor v0.0.0-20220901235040-6ca97ef2ce1c
@@ -14,6 +16,7 @@ require (
 	fyne.io/systray v1.10.1-0.20221115204952-d16a6177e6f1 // indirect
 	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/benoitkugler/textlayout v0.3.0 // indirect
+	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fredbi/uri v0.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
