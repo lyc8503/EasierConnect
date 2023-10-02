@@ -11,6 +11,8 @@
 
 ~~p.s. 倒也不至于删库跑路, 如果没特殊需要不用 fork...~~
 
+最后的版本有两个, Build 14 和 Build 15 分别对应 master 和 dev 分支, 可以在 releases 中直接下载.
+
 代码仅供学习交流, 撤回 AGPLv3 的相关开源许可证.
 
 感谢所有 issue 提出者和 Contributor 做出的贡献~
